@@ -732,6 +732,28 @@ async function start() {
   messageEl.textContent = stats.isLonely ? WELCOME_BACK : "今日もよく来てくれたね!";
 }
 
+function registerServiceWorker() {
+  // localhost は開発中の変更をすぐ確認できるよう対象外にする
+  if (!("serviceWorker" in navigator) || location.hostname === "localhost") return;
+  const wasControlled = Boolean(navigator.serviceWorker.controller);
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    // 入力中は画面を読み込み直さず、次に開いたときに新しい版にする
+    if (wasControlled && !document.querySelector("dialog[open]")) {
+      location.reload();
+    }
+  });
+  navigator.serviceWorker.register("sw.js").then((registration) => {
+    // ホーム画面のアプリは開き直さず復帰することがあるので、復帰時にも更新を確認する
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") {
+        registration.update().catch(() => {});
+      }
+    });
+  }).catch(console.error);
+}
+
+registerServiceWorker();
+
 start().catch((error) => {
   console.error(error);
   messageEl.textContent = "データを読み込めませんでした。ページを開き直してください。";
