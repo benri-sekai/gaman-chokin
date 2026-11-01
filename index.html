@@ -8,7 +8,8 @@
   <meta name="apple-mobile-web-app-title" content="我慢貯金">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icon-180.png">
-  <link rel="stylesheet" href="style.css">
+  <!-- 更新のたびに v の番号を上げ、古いキャッシュとの混在を防ぐ -->
+  <link rel="stylesheet" href="style.css?v=3">
   <title>我慢貯金</title>
 </head>
 <body>
@@ -24,7 +25,7 @@
     </section>
 
     <button class="primary" id="open-sheet" type="button">我慢した!</button>
-    <p class="note">実際の貯金ではなく、記録上の金額です</p>
+    <p class="note">実際の貯金ではなく、記録上の金額です(ver.3)</p>
   </main>
 
   <main class="history" id="view-history" hidden>
@@ -70,6 +71,6 @@
     </form>
   </dialog>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=3"></script>
 </body>
 </html>
