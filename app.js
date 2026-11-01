@@ -47,17 +47,20 @@ const SUGGESTIONS = [
 const VISIBLE_SUGGESTIONS = 3;
 
 const BACKUP_APP_ID = "gaman-chokin";
-const BACKUP_VERSION = 1;
+const BACKUP_VERSION = 2;
 const BACKUP_REMIND_MS = 30 * 24 * 60 * 60 * 1000;
 const LAST_EXPORT_KEY = "lastExportAt";
 
 const DB_NAME = "gaman-chokin";
 const STORE = "records";
 const GOAL_STORE = "goals";
+const WISH_STORE = "wishes";
+
+const CHART_PLOT = { left: 36, right: 328, top: 10, bottom: 146 };
 
 function openDb() {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 2);
+    const request = indexedDB.open(DB_NAME, 3);
     request.onupgradeneeded = (event) => {
       // 既存の記録を残したまま、足りない保存先だけを作る
       if (event.oldVersion < 1) {
@@ -65,6 +68,9 @@ function openDb() {
       }
       if (event.oldVersion < 2) {
         request.result.createObjectStore(GOAL_STORE, { keyPath: "id", autoIncrement: true });
+      }
+      if (event.oldVersion < 3) {
+        request.result.createObjectStore(WISH_STORE, { keyPath: "id", autoIncrement: true });
       }
     };
     // 古い画面が閉じられると onsuccess に進むので、案内だけ出して待つ
@@ -101,15 +107,38 @@ function deleteRecord(db, id) {
 }
 
 // 途中で失敗したら元のデータが残るよう、1回のトランザクションで置き換える
-function replaceAllData(db, records, goals) {
+function replaceAllData(db, records, goals, wishes) {
   return new Promise((resolve, reject) => {
-    const tx = db.transaction([STORE, GOAL_STORE], "readwrite");
+    const tx = db.transaction([STORE, GOAL_STORE, WISH_STORE], "readwrite");
     const recordStore = tx.objectStore(STORE);
     const goalStore = tx.objectStore(GOAL_STORE);
+    const wishStore = tx.objectStore(WISH_STORE);
     recordStore.clear();
     goalStore.clear();
+    wishStore.clear();
     records.forEach((record) => recordStore.add(record));
     goals.forEach((goal) => goalStore.add(goal));
+    wishes.forEach((wish) => wishStore.add(wish));
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  });
+}
+
+// 購入の記録とリストの更新は、片方だけ残らないよう同時に保存する
+function purchaseWish(db, wish) {
+  return new Promise((resolve, reject) => {
+    const now = new Date().toISOString();
+    const tx = db.transaction([STORE, WISH_STORE], "readwrite");
+    tx.objectStore(STORE).add({
+      type: "purchase",
+      name: wish.name,
+      amount: wish.price,
+      category: "その他",
+      memo: "",
+      createdAt: now,
+    });
+    tx.objectStore(WISH_STORE).put({ ...wish, purchasedAt: now });
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
     tx.onabort = () => reject(tx.error);
@@ -142,12 +171,25 @@ const goalSheet = document.getElementById("goal-sheet");
 const goalNameField = document.getElementById("goal-name");
 const goalAmountField = document.getElementById("goal-amount");
 const deleteGoalButton = document.getElementById("delete-goal");
+const wishSheet = document.getElementById("wish-sheet");
+const wishNameField = document.getElementById("wish-name");
+const wishPriceField = document.getElementById("wish-price");
+const wishMemoField = document.getElementById("wish-memo");
+const buyWishButton = document.getElementById("buy-wish");
+const deleteWishButton = document.getElementById("delete-wish");
+const chartEl = document.getElementById("chart");
+const chartReadout = document.getElementById("chart-readout");
 
 let editingRecord = null;
 let editingGoal = null;
 let latestRecords = [];
 let latestGoals = [];
+let latestWishes = [];
 let pendingImport = null;
+let editingWish = null;
+let chartRangeDays = 30;
+let chartDays = [];
+let chartScaleMax = 1;
 let newRecordType = "gaman";
 let newRecordTemplate = null;
 let stats = null;
@@ -158,7 +200,7 @@ function yen(amount) {
 }
 
 function isSpent(record) {
-  return record.type === "spent";
+  return record.type === "spent" || record.type === "purchase";
 }
 
 function levelStartExp(level) {
@@ -212,6 +254,7 @@ function getStats(records, goals) {
   });
   return {
     balance,
+    timeline,
     milestones: getMilestones(timeline, goals),
     gamanCount: gaman.length,
     exp,
@@ -235,7 +278,11 @@ function renderHistory(records) {
       const title = document.createElement("span");
       title.className = "record-title";
       const label = record.name || record.category;
-      title.textContent = isSpent(record) ? `使っちゃった(${label})` : label;
+      if (record.type === "purchase") {
+        title.textContent = `買った(${label})`;
+      } else {
+        title.textContent = isSpent(record) ? `使っちゃった(${label})` : label;
+      }
       const sub = document.createElement("span");
       sub.className = "record-sub";
       sub.textContent = [formatDate(record.createdAt), record.memo].filter(Boolean).join(" ・ ");
@@ -321,6 +368,206 @@ function renderMilestones() {
   }
 }
 
+// 1日ごとの「その日の終わりの貯金額」を求める。始まりが分かるよう、最初の記録の前日(0円)から描く
+function getChartDays(timeline, rangeDays) {
+  if (timeline.length === 0) return [];
+  const startOfDay = (time) => {
+    const date = new Date(time);
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  };
+  const shiftDays = (date, days) => new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
+  const today = startOfDay(Date.now());
+  const beforeFirst = shiftDays(startOfDay(timeline[0].time), -1);
+  const rangeStart = shiftDays(today, -(rangeDays - 1));
+  const start = rangeDays > 0 && rangeStart > beforeFirst ? rangeStart : beforeFirst;
+  const days = [];
+  let next = 0;
+  let balance = 0;
+  for (let day = start; day <= today; day = shiftDays(day, 1)) {
+    const dayEnd = shiftDays(day, 1).getTime();
+    while (next < timeline.length && timeline[next].time < dayEnd) {
+      balance = timeline[next].balance;
+      next += 1;
+    }
+    days.push({ date: day, balance });
+  }
+  return days;
+}
+
+function niceMax(value) {
+  if (value <= 0) return 1000;
+  const unit = 10 ** Math.floor(Math.log10(value));
+  return Math.ceil(value / unit) * unit;
+}
+
+function compactYen(amount) {
+  return amount >= 10000 ? `${amount / 10000}万` : amount.toLocaleString("ja-JP");
+}
+
+function chartX(index) {
+  const { left, right } = CHART_PLOT;
+  return left + (index / Math.max(1, chartDays.length - 1)) * (right - left);
+}
+
+function chartY(amount) {
+  const { top, bottom } = CHART_PLOT;
+  return bottom - (amount / chartScaleMax) * (bottom - top);
+}
+
+function svgElement(name, attributes, text) {
+  const element = document.createElementNS("http://www.w3.org/2000/svg", name);
+  for (const [key, value] of Object.entries(attributes)) {
+    element.setAttribute(key, value);
+  }
+  if (text !== undefined) element.textContent = text;
+  return element;
+}
+
+function showChartReadout(day) {
+  const value = document.createElement("b");
+  value.textContent = yen(day.balance);
+  chartReadout.replaceChildren(value, `${day.date.getMonth() + 1}/${day.date.getDate()}`);
+}
+
+function moveChartCursor(index) {
+  const x = chartX(index);
+  const day = chartDays[index];
+  const cursor = document.getElementById("chart-cursor");
+  cursor.setAttribute("visibility", "visible");
+  const line = cursor.querySelector("line");
+  line.setAttribute("x1", x);
+  line.setAttribute("x2", x);
+  const dot = cursor.querySelector("circle");
+  dot.setAttribute("cx", x);
+  dot.setAttribute("cy", chartY(day.balance));
+  showChartReadout(day);
+}
+
+function hideChartCursor() {
+  document.getElementById("chart-cursor")?.setAttribute("visibility", "hidden");
+  if (chartDays.length > 0) showChartReadout(chartDays[chartDays.length - 1]);
+}
+
+function renderChart() {
+  chartDays = getChartDays(stats.timeline, chartRangeDays);
+  chartEl.closest(".chart-card").hidden = chartDays.length === 0;
+  chartEl.replaceChildren();
+  if (chartDays.length === 0) return;
+  const { left, right, top, bottom } = CHART_PLOT;
+  chartScaleMax = niceMax(Math.max(...chartDays.map((day) => day.balance)));
+  for (const tick of [0, chartScaleMax / 2, chartScaleMax]) {
+    const y = chartY(tick);
+    chartEl.append(
+      svgElement("line", { class: "grid", x1: left, x2: right, y1: y, y2: y }),
+      svgElement("text", { x: left - 6, y: y + 4, "text-anchor": "end" }, compactYen(tick)),
+    );
+  }
+  const label = (day) => `${day.date.getMonth() + 1}/${day.date.getDate()}`;
+  chartEl.append(
+    svgElement("text", { x: left, y: bottom + 18 }, label(chartDays[0])),
+    svgElement("text", { x: right, y: bottom + 18, "text-anchor": "end" }, label(chartDays[chartDays.length - 1])),
+    svgElement("polyline", {
+      class: "line",
+      points: chartDays.map((day, index) => `${chartX(index)},${chartY(day.balance)}`).join(" "),
+    }),
+  );
+  const last = chartDays[chartDays.length - 1];
+  chartEl.append(
+    svgElement("circle", { class: "dot", cx: right, cy: chartY(last.balance), r: 5 }),
+  );
+  const cursor = svgElement("g", { id: "chart-cursor", visibility: "hidden" });
+  cursor.append(
+    svgElement("line", { class: "crosshair", y1: top, y2: bottom }),
+    svgElement("circle", { class: "dot", r: 5 }),
+  );
+  chartEl.append(cursor);
+  chartEl.setAttribute(
+    "aria-label",
+    `貯金額の推移。${label(chartDays[0])}から${label(last)}まで。現在${yen(last.balance)}。各記録は下の履歴で確認できます。`,
+  );
+  showChartReadout(last);
+}
+
+function handleChartPointer(event) {
+  if (chartDays.length === 0) return;
+  const rect = chartEl.getBoundingClientRect();
+  const { left, right } = CHART_PLOT;
+  const x = ((event.clientX - rect.left) / rect.width) * 340;
+  const ratio = Math.min(1, Math.max(0, (x - left) / (right - left)));
+  moveChartCursor(Math.round(ratio * (chartDays.length - 1)));
+}
+
+function wishCard(wish) {
+  const isPurchased = Boolean(wish.purchasedAt);
+  const isAffordable = stats.balance >= wish.price;
+  const name = document.createElement("span");
+  name.className = "record-title";
+  name.textContent = wish.name;
+  const price = document.createElement("b");
+  price.textContent = yen(wish.price);
+  const top = document.createElement("span");
+  top.className = "milestone-top";
+  top.append(name, price);
+  const card = document.createElement("button");
+  card.type = "button";
+  card.className = "milestone";
+  card.append(top);
+  if (!isPurchased && !isAffordable) {
+    const fill = document.createElement("span");
+    fill.className = "bar-fill";
+    fill.style.width = `${(stats.balance / wish.price) * 100}%`;
+    const bar = document.createElement("span");
+    bar.className = "bar";
+    bar.append(fill);
+    card.append(bar);
+  }
+  const sub = document.createElement("span");
+  sub.className = "record-sub";
+  let status = `あと${yen(wish.price - stats.balance)}`;
+  if (isPurchased) {
+    status = `${formatDate(wish.purchasedAt).split(" ")[0]} に購入`;
+  } else if (isAffordable) {
+    status = "買えるよ!押して「買った」を記録できます";
+  }
+  sub.textContent = [status, wish.memo].filter(Boolean).join(" ・ ");
+  card.append(sub);
+  card.addEventListener("click", () => openWishForm(wish));
+  const item = document.createElement("li");
+  item.append(card);
+  return item;
+}
+
+function renderWishes() {
+  document.getElementById("wish-balance").textContent = stats.balance.toLocaleString("ja-JP");
+  const pending = latestWishes.filter((wish) => !wish.purchasedAt).sort((a, b) => a.price - b.price);
+  const purchased = latestWishes
+    .filter((wish) => wish.purchasedAt)
+    .sort((a, b) => b.purchasedAt.localeCompare(a.purchasedAt));
+  document.getElementById("wishes").replaceChildren(...pending.map(wishCard));
+  document.getElementById("wishes-empty").hidden = pending.length > 0;
+  document.getElementById("purchased").replaceChildren(...purchased.map(wishCard));
+  document.getElementById("purchased-section").hidden = purchased.length === 0;
+}
+
+function resetWishButtons() {
+  buyWishButton.textContent = editingWish ? `買った(貯金額から${yen(editingWish.price)}引く)` : "買った";
+  delete buyWishButton.dataset.armed;
+  deleteWishButton.textContent = "リストから削除";
+  delete deleteWishButton.dataset.armed;
+}
+
+function openWishForm(wish = null) {
+  editingWish = wish;
+  document.getElementById("wish-title").textContent = wish ? "ほしいものを修正" : "ほしいものを追加";
+  wishNameField.value = wish ? wish.name : "";
+  wishPriceField.value = wish ? wish.price : "";
+  wishMemoField.value = wish?.memo ?? "";
+  buyWishButton.hidden = !wish || Boolean(wish.purchasedAt) || stats.balance < wish.price;
+  deleteWishButton.hidden = !wish;
+  resetWishButtons();
+  wishSheet.showModal();
+}
+
 function getLastExportTime() {
   try {
     const value = localStorage.getItem(LAST_EXPORT_KEY);
@@ -370,6 +617,7 @@ async function exportBackup() {
       exportedAt: new Date().toISOString(),
       records: latestRecords,
       goals: latestGoals,
+      wishes: latestWishes,
     },
     null,
     2,
@@ -393,7 +641,9 @@ async function exportBackup() {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
   markExported();
-  setBackupStatus(`${latestRecords.length}件の記録と${latestGoals.length}件の目標を書き出しました。`);
+  setBackupStatus(
+    `記録${latestRecords.length}件、目標${latestGoals.length}件、ほしいもの${latestWishes.length}件を書き出しました。`,
+  );
 }
 
 function isValidDate(value) {
@@ -415,7 +665,7 @@ function parseBackup(text) {
   }
   const records = data.records.map((record) => {
     const isValid =
-      (record?.type === "gaman" || record?.type === "spent") &&
+      (record?.type === "gaman" || record?.type === "spent" || record?.type === "purchase") &&
       isValidAmount(record.amount) &&
       typeof record.category === "string" &&
       isValidDate(record.createdAt);
@@ -438,7 +688,27 @@ function parseBackup(text) {
     if (!isValid) throw new Error("invalid goal");
     return { name: goal.name, amount: goal.amount, createdAt: goal.createdAt };
   });
-  return { records, goals, exportedAt: isValidDate(data.exportedAt) ? data.exportedAt : null };
+  // 版1のバックアップには wishes がない
+  if (data.wishes !== undefined && !Array.isArray(data.wishes)) {
+    throw new Error("invalid wishes");
+  }
+  const wishes = (data.wishes ?? []).map((wish) => {
+    const isValid =
+      typeof wish?.name === "string" &&
+      wish.name.trim() !== "" &&
+      isValidAmount(wish.price) &&
+      isValidDate(wish.createdAt) &&
+      (wish.purchasedAt === undefined || isValidDate(wish.purchasedAt));
+    if (!isValid) throw new Error("invalid wish");
+    return {
+      name: wish.name,
+      price: wish.price,
+      createdAt: wish.createdAt,
+      ...(typeof wish.memo === "string" && { memo: wish.memo }),
+      ...(wish.purchasedAt && { purchasedAt: wish.purchasedAt }),
+    };
+  });
+  return { records, goals, wishes, exportedAt: isValidDate(data.exportedAt) ? data.exportedAt : null };
 }
 
 function clearPendingImport() {
@@ -460,16 +730,22 @@ async function chooseImportFile(input) {
   }
   const date = pendingImport.exportedAt ? formatDate(pendingImport.exportedAt) : "不明";
   document.getElementById("import-summary").textContent =
-    `書き出し日:${date}、記録${pendingImport.records.length}件、目標${pendingImport.goals.length}件。` +
-    `今の記録${latestRecords.length}件と目標${latestGoals.length}件は、この内容に置き換わります。`;
+    `書き出し日:${date}、記録${pendingImport.records.length}件、目標${pendingImport.goals.length}件、` +
+    `ほしいもの${pendingImport.wishes.length}件。` +
+    `今の記録${latestRecords.length}件、目標${latestGoals.length}件、ほしいもの${latestWishes.length}件は、この内容に置き換わります。`;
   document.getElementById("import-confirm").hidden = false;
   setBackupStatus("");
 }
 
 async function render(db) {
-  const [records, goals] = await Promise.all([getAll(db, STORE), getAll(db, GOAL_STORE)]);
+  const [records, goals, wishes] = await Promise.all([
+    getAll(db, STORE),
+    getAll(db, GOAL_STORE),
+    getAll(db, WISH_STORE),
+  ]);
   latestRecords = records;
   latestGoals = goals;
+  latestWishes = wishes;
   stats = getStats(records, goals);
   renderBackupStatus();
   totalEl.textContent = stats.balance.toLocaleString("ja-JP");
@@ -486,6 +762,8 @@ async function render(db) {
   characterEl.dataset.mood = stats.isLonely ? "sad" : "normal";
   renderHistory(records);
   renderMilestones();
+  renderChart();
+  renderWishes();
 }
 
 function celebrate(amount, before) {
@@ -584,7 +862,7 @@ function showAmountStep(db, template) {
 }
 
 function showView(name) {
-  for (const view of ["home", "history", "milestones", "settings"]) {
+  for (const view of ["home", "history", "milestones", "wishes", "settings"]) {
     const isCurrent = view === name;
     document.getElementById(`view-${view}`).hidden = !isCurrent;
     const tab = document.getElementById(`tab-${view}`);
@@ -631,20 +909,92 @@ async function start() {
   document.getElementById("tab-history").addEventListener("click", () => showView("history"));
   document.getElementById("tab-milestones").addEventListener("click", () => showView("milestones"));
   document.getElementById("tab-settings").addEventListener("click", () => showView("settings"));
+  document.getElementById("tab-wishes").addEventListener("click", () => showView("wishes"));
+
+  for (const button of document.querySelectorAll(".range-option")) {
+    button.addEventListener("click", () => {
+      chartRangeDays = Number(button.dataset.days);
+      for (const other of document.querySelectorAll(".range-option")) {
+        other.setAttribute("aria-pressed", String(other === button));
+      }
+      renderChart();
+    });
+  }
+  chartEl.addEventListener("pointerdown", handleChartPointer);
+  chartEl.addEventListener("pointermove", handleChartPointer);
+  chartEl.addEventListener("pointerleave", (event) => {
+    // スマホは指を離した後も値を読めるよう、マウスのときだけ消す
+    if (event.pointerType === "mouse") hideChartCursor();
+  });
+
+  const wishStatus = document.getElementById("wish-status");
+  document.getElementById("open-wish").addEventListener("click", () => openWishForm());
+  document.getElementById("close-wish").addEventListener("click", () => wishSheet.close());
+  document.getElementById("wish-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const name = wishNameField.value.trim();
+    if (!name) {
+      wishNameField.value = "";
+      wishNameField.reportValidity();
+      return;
+    }
+    const price = Number(wishPriceField.value);
+    const memo = wishMemoField.value.trim();
+    await writeStore(
+      db,
+      (store) => {
+        if (editingWish) {
+          store.put({ ...editingWish, name, price, memo });
+        } else {
+          store.add({ name, price, memo, createdAt: new Date().toISOString() });
+        }
+      },
+      WISH_STORE,
+    );
+    wishStatus.textContent = "";
+    wishSheet.close();
+    await render(db);
+  });
+  // どちらも誤操作を防ぐため、2回押すと実行する
+  buyWishButton.addEventListener("click", async () => {
+    if (!buyWishButton.dataset.armed) {
+      buyWishButton.dataset.armed = "true";
+      buyWishButton.textContent = "もう一度押すと記録します";
+      return;
+    }
+    await purchaseWish(db, editingWish);
+    wishStatus.textContent = `「${editingWish.name}」を買ったよ!がんばったね!`;
+    messageEl.textContent = `「${editingWish.name}」おめでとう!`;
+    wishSheet.close();
+    await render(db);
+  });
+  deleteWishButton.addEventListener("click", async () => {
+    if (!deleteWishButton.dataset.armed) {
+      deleteWishButton.dataset.armed = "true";
+      deleteWishButton.textContent = "もう一度押すと削除します";
+      return;
+    }
+    await writeStore(db, (store) => store.delete(editingWish.id), WISH_STORE);
+    wishStatus.textContent = "";
+    wishSheet.close();
+    await render(db);
+  });
   document.getElementById("backup-hint").addEventListener("click", () => showView("settings"));
   document.getElementById("export-data").addEventListener("click", exportBackup);
   document.getElementById("import-file").addEventListener("change", (event) => chooseImportFile(event.target));
   document.getElementById("import-cancel").addEventListener("click", clearPendingImport);
   document.getElementById("import-apply").addEventListener("click", async () => {
     try {
-      await replaceAllData(db, pendingImport.records, pendingImport.goals);
+      await replaceAllData(db, pendingImport.records, pendingImport.goals, pendingImport.wishes);
     } catch {
       setBackupStatus("読み込めませんでした。今のデータは変更していません。");
       return;
     }
     clearPendingImport();
     await render(db);
-    setBackupStatus(`${latestRecords.length}件の記録と${latestGoals.length}件の目標を復元しました。`);
+    setBackupStatus(
+      `記録${latestRecords.length}件、目標${latestGoals.length}件、ほしいもの${latestWishes.length}件を復元しました。`,
+    );
   });
   const resetConfirm = document.getElementById("reset-confirm");
   const resetStatus = document.getElementById("reset-status");

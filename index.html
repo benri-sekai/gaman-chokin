@@ -9,7 +9,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icon-180.png">
   <!-- 更新のたびに v の番号を上げ、古いキャッシュとの混在を防ぐ(sw.js の VERSION も同じ番号にする) -->
-  <link rel="stylesheet" href="style.css?v=11">
+  <link rel="stylesheet" href="style.css?v=12">
   <title>我慢貯金</title>
 </head>
 <body>
@@ -36,11 +36,23 @@
     <button class="primary" id="open-sheet" type="button">我慢した!</button>
     <button class="quiet" id="open-spent" type="button">使っちゃった…</button>
     <button class="quiet" id="backup-hint" type="button" hidden>そろそろ記録を保管しませんか?</button>
-    <p class="note">実際の貯金ではなく、記録上の金額です(ver.11)</p>
+    <p class="note">実際の貯金ではなく、記録上の金額です(ver.12)</p>
   </main>
 
   <main class="history" id="view-history" hidden>
     <h1>履歴</h1>
+    <section class="chart-card" aria-labelledby="chart-title">
+      <div class="chart-head">
+        <h2 id="chart-title">貯金額の推移</h2>
+        <div class="range" role="group" aria-label="表示する期間">
+          <button class="range-option" type="button" data-days="30" aria-pressed="true">1か月</button>
+          <button class="range-option" type="button" data-days="90" aria-pressed="false">3か月</button>
+          <button class="range-option" type="button" data-days="0" aria-pressed="false">全期間</button>
+        </div>
+      </div>
+      <p class="chart-readout" id="chart-readout"></p>
+      <svg class="chart" id="chart" viewBox="0 0 340 172" role="img" aria-labelledby="chart-title"></svg>
+    </section>
     <p class="note" id="history-empty">まだ記録がありません</p>
     <ul class="records" id="records"></ul>
   </main>
@@ -64,6 +76,19 @@
     </section>
   </main>
 
+  <main class="history" id="view-wishes" hidden>
+    <h1>ほしいものリスト</h1>
+    <p class="note">現在の我慢貯金:<span id="wish-balance">0</span>円</p>
+    <button class="secondary" id="open-wish" type="button">ほしいものを追加</button>
+    <p class="backup-status" id="wish-status" role="status"></p>
+    <p class="note" id="wishes-empty">貯めて買いたい物を追加すると、買えるようになったときにわかります</p>
+    <ul class="records" id="wishes"></ul>
+    <section id="purchased-section" hidden>
+      <h2 class="section-title">買ったもの</h2>
+      <ul class="records" id="purchased"></ul>
+    </section>
+  </main>
+
   <main class="history" id="view-settings" hidden>
     <h1>設定</h1>
     <h2 class="section-title">データの保管</h2>
@@ -72,7 +97,7 @@
     <button class="primary backup-action" id="export-data" type="button">ファイルに書き出す</button>
 
     <h2 class="section-title">データの復元</h2>
-    <p class="note">書き出したファイルから、記録と目標を元に戻します。</p>
+    <p class="note">書き出したファイルから、記録、目標、ほしいものを元に戻します。</p>
     <label class="secondary file-button">
       ファイルを選ぶ
       <input class="visually-hidden" id="import-file" type="file" accept=".json,application/json">
@@ -85,7 +110,7 @@
     <p class="backup-status" id="backup-status" role="status"></p>
 
     <h2 class="section-title">記録のリセット</h2>
-    <p class="note">すべての記録を削除して、キャラと貯金額を最初の状態に戻します。自分の目標は残ります。</p>
+    <p class="note">すべての記録を削除して、キャラと貯金額を最初の状態に戻します。自分の目標とほしいものリストは残ります。</p>
     <button class="danger-outline" id="reset-open" type="button">記録をリセット</button>
     <div class="import-confirm" id="reset-confirm" hidden>
       <p id="reset-summary"></p>
@@ -99,6 +124,7 @@
     <button class="tab" id="tab-home" type="button" aria-current="page">ホーム</button>
     <button class="tab" id="tab-history" type="button">履歴</button>
     <button class="tab" id="tab-milestones" type="button">目標</button>
+    <button class="tab" id="tab-wishes" type="button">ほしい物</button>
     <button class="tab" id="tab-settings" type="button">設定</button>
   </nav>
 
@@ -161,6 +187,30 @@
     </form>
   </dialog>
 
-  <script src="app.js?v=11"></script>
+  <dialog class="sheet form-sheet" id="wish-sheet" aria-labelledby="wish-title">
+    <form id="wish-form">
+      <div class="sheet-header">
+        <h2 id="wish-title">ほしいものを追加</h2>
+        <button class="close" id="close-wish" type="button" aria-label="閉じる">×</button>
+      </div>
+      <label class="field">
+        <span>ほしいもの</span>
+        <input id="wish-name" type="text" maxlength="40" required>
+      </label>
+      <label class="field">
+        <span>価格(円)</span>
+        <input id="wish-price" type="number" inputmode="numeric" min="1" max="99999999" step="1" required>
+      </label>
+      <label class="field">
+        <span>メモ(任意)</span>
+        <input id="wish-memo" type="text" maxlength="100">
+      </label>
+      <button class="primary" type="submit">保存する</button>
+      <button class="secondary wish-buy" id="buy-wish" type="button" hidden>買った</button>
+      <button class="danger" id="delete-wish" type="button" hidden>リストから削除</button>
+    </form>
+  </dialog>
+
+  <script src="app.js?v=12"></script>
 </body>
 </html>
