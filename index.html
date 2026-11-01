@@ -9,7 +9,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icon-180.png">
   <!-- 更新のたびに v の番号を上げ、古いキャッシュとの混在を防ぐ -->
-  <link rel="stylesheet" href="style.css?v=4">
+  <link rel="stylesheet" href="style.css?v=5">
   <title>我慢貯金</title>
 </head>
 <body>
@@ -30,11 +30,12 @@
       <h1>現在の我慢貯金</h1>
       <p class="amount"><span id="total">0</span><small>円</small></p>
       <p class="count"><span id="count">0</span>回 我慢できた ・ 累計<span id="cumulative">0</span>円</p>
+      <p class="next-milestone" id="next-milestone" hidden></p>
     </section>
 
     <button class="primary" id="open-sheet" type="button">我慢した!</button>
     <button class="quiet" id="open-spent" type="button">使っちゃった…</button>
-    <p class="note">実際の貯金ではなく、記録上の金額です(ver.4)</p>
+    <p class="note">実際の貯金ではなく、記録上の金額です(ver.5)</p>
   </main>
 
   <main class="history" id="view-history" hidden>
@@ -43,9 +44,29 @@
     <ul class="records" id="records"></ul>
   </main>
 
+  <main class="history" id="view-milestones" hidden>
+    <h1>マイルストーン</h1>
+    <button class="secondary" id="open-goal" type="button">目標を追加</button>
+
+    <h2 class="section-title">自分の目標</h2>
+    <p class="note" id="goals-empty">「沖縄旅行」のように、貯めて叶えたいことを追加できます</p>
+    <ul class="records" id="goals"></ul>
+
+    <section id="suggestions-section">
+      <h2 class="section-title">こんなことができるよ</h2>
+      <ul class="records" id="suggestions"></ul>
+    </section>
+
+    <section id="achieved-section" hidden>
+      <h2 class="section-title">達成したこと</h2>
+      <ul class="records" id="achieved"></ul>
+    </section>
+  </main>
+
   <nav class="tabs" aria-label="画面の切り替え">
     <button class="tab" id="tab-home" type="button" aria-current="page">ホーム</button>
     <button class="tab" id="tab-history" type="button">履歴</button>
+    <button class="tab" id="tab-milestones" type="button">目標</button>
   </nav>
 
   <dialog class="sheet" id="sheet" aria-labelledby="sheet-title">
@@ -80,6 +101,25 @@
     </form>
   </dialog>
 
-  <script src="app.js?v=4"></script>
+  <dialog class="sheet form-sheet" id="goal-sheet" aria-labelledby="goal-title">
+    <form id="goal-form">
+      <div class="sheet-header">
+        <h2 id="goal-title">目標を追加</h2>
+        <button class="close" id="close-goal" type="button" aria-label="閉じる">×</button>
+      </div>
+      <label class="field">
+        <span>叶えたいこと</span>
+        <input id="goal-name" type="text" maxlength="40" required>
+      </label>
+      <label class="field">
+        <span>目標金額(円)</span>
+        <input id="goal-amount" type="number" inputmode="numeric" min="1" max="99999999" step="1" required>
+      </label>
+      <button class="primary" type="submit">保存する</button>
+      <button class="danger" id="delete-goal" type="button" hidden>この目標を削除</button>
+    </form>
+  </dialog>
+
+  <script src="app.js?v=5"></script>
 </body>
 </html>

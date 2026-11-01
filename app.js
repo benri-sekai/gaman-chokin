@@ -33,24 +33,48 @@ const STAGES = [
 const LEVEL_UNIT = 500;
 const SAD_AFTER_MS = 3 * 24 * 60 * 60 * 1000;
 
+// 貯金額に応じてアプリから提案する例
+const SUGGESTIONS = [
+  { name: "カフェでケーキセット", amount: 1000 },
+  { name: "焼肉ランチ", amount: 3000 },
+  { name: "映画を2回", amount: 5000 },
+  { name: "ちょっといいディナー", amount: 10000 },
+  { name: "温泉で1泊", amount: 30000 },
+  { name: "国内旅行", amount: 50000 },
+  { name: "ちょっと贅沢な国内旅行", amount: 100000 },
+  { name: "海外旅行", amount: 200000 },
+];
+const VISIBLE_SUGGESTIONS = 3;
+
 const DB_NAME = "gaman-chokin";
 const STORE = "records";
+const GOAL_STORE = "goals";
 
 function openDb() {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 1);
-    request.onupgradeneeded = () => {
-      request.result.createObjectStore(STORE, { keyPath: "id", autoIncrement: true });
+    const request = indexedDB.open(DB_NAME, 2);
+    request.onupgradeneeded = (event) => {
+      // 既存の記録を残したまま、足りない保存先だけを作る
+      if (event.oldVersion < 1) {
+        request.result.createObjectStore(STORE, { keyPath: "id", autoIncrement: true });
+      }
+      if (event.oldVersion < 2) {
+        request.result.createObjectStore(GOAL_STORE, { keyPath: "id", autoIncrement: true });
+      }
     };
-    request.onsuccess = () => resolve(request.result);
+    request.onblocked = () => reject(new Error("別の画面がデータを使用中です"));
+    request.onsuccess = () => {
+      request.result.onversionchange = () => request.result.close();
+      resolve(request.result);
+    };
     request.onerror = () => reject(request.error);
   });
 }
 
-function writeStore(db, action) {
+function writeStore(db, action, storeName = STORE) {
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE, "readwrite");
-    action(tx.objectStore(STORE));
+    const tx = db.transaction(storeName, "readwrite");
+    action(tx.objectStore(storeName));
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
@@ -68,9 +92,9 @@ function deleteRecord(db, id) {
   return writeStore(db, (store) => store.delete(id));
 }
 
-function getRecords(db) {
+function getAll(db, storeName) {
   return new Promise((resolve, reject) => {
-    const request = db.transaction(STORE).objectStore(STORE).getAll();
+    const request = db.transaction(storeName).objectStore(storeName).getAll();
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
   });
@@ -90,8 +114,13 @@ const amountField = document.getElementById("field-amount");
 const categoryField = document.getElementById("field-category");
 const memoField = document.getElementById("field-memo");
 const deleteButton = document.getElementById("delete-record");
+const goalSheet = document.getElementById("goal-sheet");
+const goalNameField = document.getElementById("goal-name");
+const goalAmountField = document.getElementById("goal-amount");
+const deleteGoalButton = document.getElementById("delete-goal");
 
 let editingRecord = null;
+let editingGoal = null;
 let newRecordType = "gaman";
 let stats = null;
 let moodTimer = null;
@@ -108,7 +137,38 @@ function levelStartExp(level) {
   return LEVEL_UNIT * (level - 1) ** 2;
 }
 
-function getStats(records) {
+// 記録から達成日を求める。貯金額が後で減っても、記録が残る限り達成のまま
+function findAchievedTime(timeline, target, since) {
+  let balanceAtStart = 0;
+  for (const point of timeline) {
+    if (point.time >= since) {
+      if (balanceAtStart >= target) return since;
+      if (point.balance >= target) return point.time;
+    } else {
+      balanceAtStart = point.balance;
+    }
+  }
+  return balanceAtStart >= target ? since : null;
+}
+
+function getMilestones(timeline, goals) {
+  const fromGoals = goals.map((goal) => ({
+    key: `goal-${goal.id}`,
+    goal,
+    name: goal.name,
+    amount: goal.amount,
+    achievedTime: findAchievedTime(timeline, goal.amount, new Date(goal.createdAt).getTime()),
+  }));
+  const fromSuggestions = SUGGESTIONS.map((suggestion) => ({
+    key: `suggestion-${suggestion.name}`,
+    name: suggestion.name,
+    amount: suggestion.amount,
+    achievedTime: findAchievedTime(timeline, suggestion.amount, 0),
+  }));
+  return [...fromGoals, ...fromSuggestions];
+}
+
+function getStats(records, goals) {
   const sumOf = (list) => list.reduce((sum, record) => sum + record.amount, 0);
   const gaman = records.filter((record) => !isSpent(record));
   // 経験値は「使っちゃった」では減らさない
@@ -117,12 +177,14 @@ function getStats(records) {
   const lastTime = Math.max(0, ...records.map((record) => new Date(record.createdAt).getTime()));
   // 使いすぎた分を後の我慢に持ち越さないよう、古い順に計算して0円で止める
   const oldestFirst = [...records].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-  const balance = oldestFirst.reduce(
-    (sum, record) => Math.max(0, sum + (isSpent(record) ? -record.amount : record.amount)),
-    0,
-  );
+  let balance = 0;
+  const timeline = oldestFirst.map((record) => {
+    balance = Math.max(0, balance + (isSpent(record) ? -record.amount : record.amount));
+    return { time: new Date(record.createdAt).getTime(), balance };
+  });
   return {
     balance,
+    milestones: getMilestones(timeline, goals),
     gamanCount: gaman.length,
     exp,
     level,
@@ -166,9 +228,74 @@ function renderHistory(records) {
   );
 }
 
+function milestoneCard(milestone) {
+  const name = document.createElement("span");
+  name.className = "record-title";
+  name.textContent = milestone.name;
+  const amount = document.createElement("b");
+  amount.textContent = yen(milestone.amount);
+  const top = document.createElement("span");
+  top.className = "milestone-top";
+  top.append(name, amount);
+  const sub = document.createElement("span");
+  sub.className = "record-sub";
+  const isAchieved = milestone.achievedTime !== null;
+  sub.textContent = isAchieved
+    ? `達成! ${formatDate(milestone.achievedTime).split(" ")[0]}`
+    : `あと${yen(milestone.amount - stats.balance)}`;
+  const card = document.createElement(milestone.goal ? "button" : "div");
+  card.className = "milestone";
+  card.append(top);
+  if (!isAchieved) {
+    const fill = document.createElement("span");
+    fill.className = "bar-fill";
+    fill.style.width = `${(stats.balance / milestone.amount) * 100}%`;
+    const bar = document.createElement("span");
+    bar.className = "bar";
+    bar.append(fill);
+    card.append(bar);
+  }
+  card.append(sub);
+  if (milestone.goal) {
+    card.type = "button";
+    card.addEventListener("click", () => openGoalForm(milestone.goal));
+  }
+  const item = document.createElement("li");
+  item.append(card);
+  return item;
+}
+
+function renderMilestones() {
+  const byAmount = (a, b) => a.amount - b.amount;
+  const pending = stats.milestones.filter((milestone) => milestone.achievedTime === null).sort(byAmount);
+  const achieved = stats.milestones
+    .filter((milestone) => milestone.achievedTime !== null)
+    .sort((a, b) => b.achievedTime - a.achievedTime || b.amount - a.amount);
+  const pendingGoals = pending.filter((milestone) => milestone.goal);
+  const pendingSuggestions = pending.filter((milestone) => !milestone.goal);
+
+  const goalsEl = document.getElementById("goals");
+  goalsEl.replaceChildren(...pendingGoals.map(milestoneCard));
+  document.getElementById("goals-empty").hidden = pendingGoals.length > 0;
+  document
+    .getElementById("suggestions")
+    .replaceChildren(...pendingSuggestions.slice(0, VISIBLE_SUGGESTIONS).map(milestoneCard));
+  document.getElementById("suggestions-section").hidden = pendingSuggestions.length === 0;
+  document.getElementById("achieved").replaceChildren(...achieved.map(milestoneCard));
+  document.getElementById("achieved-section").hidden = achieved.length === 0;
+
+  // ホームには、自分の目標を優先して次の1件を出す
+  const next = pendingGoals[0] ?? pendingSuggestions[0];
+  const nextEl = document.getElementById("next-milestone");
+  nextEl.hidden = !next;
+  if (next) {
+    nextEl.textContent = `次の目標:${next.name} あと${yen(next.amount - stats.balance)}`;
+  }
+}
+
 async function render(db) {
-  const records = await getRecords(db);
-  stats = getStats(records);
+  const [records, goals] = await Promise.all([getAll(db, STORE), getAll(db, GOAL_STORE)]);
+  stats = getStats(records, goals);
   totalEl.textContent = stats.balance.toLocaleString("ja-JP");
   countEl.textContent = stats.gamanCount.toLocaleString("ja-JP");
   document.getElementById("cumulative").textContent = stats.exp.toLocaleString("ja-JP");
@@ -182,12 +309,21 @@ async function render(db) {
   clearTimeout(moodTimer);
   characterEl.dataset.mood = stats.isLonely ? "sad" : "normal";
   renderHistory(records);
+  renderMilestones();
 }
 
 function celebrate(amount, before) {
   const cheer = CHEERS[Math.floor(Math.random() * CHEERS.length)];
   let message = `+${yen(amount)}! ${cheer}`;
-  if (stats.stage.id !== before.stage.id) {
+  const wasAchieved = new Set(
+    before.milestones.filter((milestone) => milestone.achievedTime !== null).map((milestone) => milestone.key),
+  );
+  const newlyAchieved = stats.milestones
+    .filter((milestone) => milestone.achievedTime !== null && !wasAchieved.has(milestone.key))
+    .sort((a, b) => b.amount - a.amount);
+  if (newlyAchieved.length > 0) {
+    message = `+${yen(amount)}! 「${newlyAchieved[0].name}」を達成!`;
+  } else if (stats.stage.id !== before.stage.id) {
     message = `+${yen(amount)}! ${stats.stage.name}に進化したよ!`;
   } else if (stats.level > before.level) {
     message = `+${yen(amount)}! Lv.${stats.level}にレベルアップ!`;
@@ -217,18 +353,31 @@ function openForm(record = null, type = "gaman") {
   formSheet.showModal();
 }
 
+function resetDeleteGoalButton() {
+  deleteGoalButton.textContent = "この目標を削除";
+  delete deleteGoalButton.dataset.armed;
+}
+
+function openGoalForm(goal = null) {
+  editingGoal = goal;
+  document.getElementById("goal-title").textContent = goal ? "目標を修正" : "目標を追加";
+  goalNameField.value = goal ? goal.name : "";
+  goalAmountField.value = goal ? goal.amount : "";
+  deleteGoalButton.hidden = !goal;
+  resetDeleteGoalButton();
+  goalSheet.showModal();
+}
+
 function showView(name) {
-  const isHome = name === "home";
-  document.getElementById("view-home").hidden = !isHome;
-  document.getElementById("view-history").hidden = isHome;
-  const homeTab = document.getElementById("tab-home");
-  const historyTab = document.getElementById("tab-history");
-  if (isHome) {
-    homeTab.setAttribute("aria-current", "page");
-    historyTab.removeAttribute("aria-current");
-  } else {
-    historyTab.setAttribute("aria-current", "page");
-    homeTab.removeAttribute("aria-current");
+  for (const view of ["home", "history", "milestones"]) {
+    const isCurrent = view === name;
+    document.getElementById(`view-${view}`).hidden = !isCurrent;
+    const tab = document.getElementById(`tab-${view}`);
+    if (isCurrent) {
+      tab.setAttribute("aria-current", "page");
+    } else {
+      tab.removeAttribute("aria-current");
+    }
   }
   window.scrollTo(0, 0);
 }
@@ -277,6 +426,44 @@ async function start() {
   document.getElementById("close-form").addEventListener("click", () => formSheet.close());
   document.getElementById("tab-home").addEventListener("click", () => showView("home"));
   document.getElementById("tab-history").addEventListener("click", () => showView("history"));
+  document.getElementById("tab-milestones").addEventListener("click", () => showView("milestones"));
+  document.getElementById("open-goal").addEventListener("click", () => openGoalForm());
+  document.getElementById("close-goal").addEventListener("click", () => goalSheet.close());
+
+  document.getElementById("goal-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const name = goalNameField.value.trim();
+    if (!name) {
+      goalNameField.value = "";
+      goalNameField.reportValidity();
+      return;
+    }
+    const amount = Number(goalAmountField.value);
+    await writeStore(
+      db,
+      (store) => {
+        if (editingGoal) {
+          store.put({ ...editingGoal, name, amount });
+        } else {
+          store.add({ name, amount, createdAt: new Date().toISOString() });
+        }
+      },
+      GOAL_STORE,
+    );
+    goalSheet.close();
+    await render(db);
+  });
+
+  deleteGoalButton.addEventListener("click", async () => {
+    if (!deleteGoalButton.dataset.armed) {
+      deleteGoalButton.dataset.armed = "true";
+      deleteGoalButton.textContent = "もう一度押すと削除します";
+      return;
+    }
+    await writeStore(db, (store) => store.delete(editingGoal.id), GOAL_STORE);
+    goalSheet.close();
+    await render(db);
+  });
   document.getElementById("open-manual").addEventListener("click", () => {
     sheet.close();
     openForm();
