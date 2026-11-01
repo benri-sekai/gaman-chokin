@@ -9,23 +9,32 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icon-180.png">
   <!-- 更新のたびに v の番号を上げ、古いキャッシュとの混在を防ぐ -->
-  <link rel="stylesheet" href="style.css?v=3">
+  <link rel="stylesheet" href="style.css?v=4">
   <title>我慢貯金</title>
 </head>
 <body>
   <main class="home" id="view-home">
     <!-- キャラ画像ができるまでの仮の表示 -->
-    <div class="character" aria-hidden="true"></div>
+    <div class="character" id="character" data-stage="egg" data-mood="normal" aria-hidden="true">
+      <span class="eye"></span><span class="eye"></span><span class="mouth"></span>
+    </div>
     <p class="message" id="message">今日もよく来てくれたね!</p>
+
+    <section class="growth" aria-label="キャラの成長">
+      <p class="growth-title"><span id="stage">たまご</span> <b>Lv.<span id="level">1</span></b></p>
+      <div class="bar"><div class="bar-fill" id="level-bar"></div></div>
+      <p class="count">次のレベルまで あと<span id="next-level">500</span>円</p>
+    </section>
 
     <section class="savings" aria-label="現在の貯金額">
       <h1>現在の我慢貯金</h1>
       <p class="amount"><span id="total">0</span><small>円</small></p>
-      <p class="count"><span id="count">0</span>回 我慢できた</p>
+      <p class="count"><span id="count">0</span>回 我慢できた ・ 累計<span id="cumulative">0</span>円</p>
     </section>
 
     <button class="primary" id="open-sheet" type="button">我慢した!</button>
-    <p class="note">実際の貯金ではなく、記録上の金額です(ver.3)</p>
+    <button class="quiet" id="open-spent" type="button">使っちゃった…</button>
+    <p class="note">実際の貯金ではなく、記録上の金額です(ver.4)</p>
   </main>
 
   <main class="history" id="view-history" hidden>
@@ -71,6 +80,6 @@
     </form>
   </dialog>
 
-  <script src="app.js?v=3"></script>
+  <script src="app.js?v=4"></script>
 </body>
 </html>

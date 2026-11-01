@@ -21,6 +21,18 @@ const CHEERS = [
   "また一歩前進だね!",
 ];
 
+const SPENT_THANKS = "教えてくれてありがとう。またがんばろう!";
+const WELCOME_BACK = "ひさしぶり!また来てくれてうれしいよ";
+
+// 進化に必要な累計額。実際に使いながら調整する
+const STAGES = [
+  { id: "egg", name: "たまご", minExp: 0 },
+  { id: "child", name: "子ども", minExp: 5000 },
+  { id: "adult", name: "大人", minExp: 30000 },
+];
+const LEVEL_UNIT = 500;
+const SAD_AFTER_MS = 3 * 24 * 60 * 60 * 1000;
+
 const DB_NAME = "gaman-chokin";
 const STORE = "records";
 
@@ -67,7 +79,7 @@ function getRecords(db) {
 const totalEl = document.getElementById("total");
 const countEl = document.getElementById("count");
 const messageEl = document.getElementById("message");
-const characterEl = document.querySelector(".character");
+const characterEl = document.getElementById("character");
 const sheet = document.getElementById("sheet");
 const templatesEl = document.getElementById("templates");
 const recordsEl = document.getElementById("records");
@@ -80,9 +92,43 @@ const memoField = document.getElementById("field-memo");
 const deleteButton = document.getElementById("delete-record");
 
 let editingRecord = null;
+let newRecordType = "gaman";
+let stats = null;
+let moodTimer = null;
 
 function yen(amount) {
   return `${amount.toLocaleString("ja-JP")}円`;
+}
+
+function isSpent(record) {
+  return record.type === "spent";
+}
+
+function levelStartExp(level) {
+  return LEVEL_UNIT * (level - 1) ** 2;
+}
+
+function getStats(records) {
+  const sumOf = (list) => list.reduce((sum, record) => sum + record.amount, 0);
+  const gaman = records.filter((record) => !isSpent(record));
+  // 経験値は「使っちゃった」では減らさない
+  const exp = sumOf(gaman);
+  const level = 1 + Math.floor(Math.sqrt(exp / LEVEL_UNIT));
+  const lastTime = Math.max(0, ...records.map((record) => new Date(record.createdAt).getTime()));
+  // 使いすぎた分を後の我慢に持ち越さないよう、古い順に計算して0円で止める
+  const oldestFirst = [...records].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  const balance = oldestFirst.reduce(
+    (sum, record) => Math.max(0, sum + (isSpent(record) ? -record.amount : record.amount)),
+    0,
+  );
+  return {
+    balance,
+    gamanCount: gaman.length,
+    exp,
+    level,
+    stage: STAGES.filter((stage) => exp >= stage.minExp).pop(),
+    isLonely: records.length > 0 && Date.now() - lastTime >= SAD_AFTER_MS,
+  };
 }
 
 function formatDate(iso) {
@@ -98,7 +144,8 @@ function renderHistory(records) {
     ...newestFirst.map((record) => {
       const title = document.createElement("span");
       title.className = "record-title";
-      title.textContent = record.name || record.category;
+      const label = record.name || record.category;
+      title.textContent = isSpent(record) ? `使っちゃった(${label})` : label;
       const sub = document.createElement("span");
       sub.className = "record-sub";
       sub.textContent = [formatDate(record.createdAt), record.memo].filter(Boolean).join(" ・ ");
@@ -106,7 +153,7 @@ function renderHistory(records) {
       main.className = "record-main";
       main.append(title, sub);
       const amount = document.createElement("b");
-      amount.textContent = yen(record.amount);
+      amount.textContent = isSpent(record) ? `−${yen(record.amount)}` : yen(record.amount);
       const button = document.createElement("button");
       button.type = "button";
       button.className = "record";
@@ -121,17 +168,35 @@ function renderHistory(records) {
 
 async function render(db) {
   const records = await getRecords(db);
-  const total = records.reduce((sum, record) => sum + record.amount, 0);
-  totalEl.textContent = total.toLocaleString("ja-JP");
-  countEl.textContent = records.length.toLocaleString("ja-JP");
+  stats = getStats(records);
+  totalEl.textContent = stats.balance.toLocaleString("ja-JP");
+  countEl.textContent = stats.gamanCount.toLocaleString("ja-JP");
+  document.getElementById("cumulative").textContent = stats.exp.toLocaleString("ja-JP");
+  document.getElementById("stage").textContent = stats.stage.name;
+  document.getElementById("level").textContent = stats.level;
+  const start = levelStartExp(stats.level);
+  const next = levelStartExp(stats.level + 1);
+  document.getElementById("level-bar").style.width = `${((stats.exp - start) / (next - start)) * 100}%`;
+  document.getElementById("next-level").textContent = (next - stats.exp).toLocaleString("ja-JP");
+  characterEl.dataset.stage = stats.stage.id;
+  clearTimeout(moodTimer);
+  characterEl.dataset.mood = stats.isLonely ? "sad" : "normal";
   renderHistory(records);
 }
 
-function celebrate(amount) {
+function celebrate(amount, before) {
   const cheer = CHEERS[Math.floor(Math.random() * CHEERS.length)];
-  messageEl.textContent = `+${yen(amount)}! ${cheer}`;
-  characterEl.classList.add("happy");
-  setTimeout(() => characterEl.classList.remove("happy"), 300);
+  let message = `+${yen(amount)}! ${cheer}`;
+  if (stats.stage.id !== before.stage.id) {
+    message = `+${yen(amount)}! ${stats.stage.name}に進化したよ!`;
+  } else if (stats.level > before.level) {
+    message = `+${yen(amount)}! Lv.${stats.level}にレベルアップ!`;
+  }
+  messageEl.textContent = message;
+  characterEl.dataset.mood = "happy";
+  moodTimer = setTimeout(() => {
+    characterEl.dataset.mood = "normal";
+  }, 1500);
 }
 
 function resetDeleteButton() {
@@ -139,9 +204,11 @@ function resetDeleteButton() {
   delete deleteButton.dataset.armed;
 }
 
-function openForm(record = null) {
+function openForm(record = null, type = "gaman") {
   editingRecord = record;
-  formTitle.textContent = record ? "記録を修正" : "金額を入力して記録";
+  newRecordType = type;
+  const newTitle = type === "spent" ? "使っちゃったを記録" : "金額を入力して記録";
+  formTitle.textContent = record ? "記録を修正" : newTitle;
   amountField.value = record ? record.amount : "";
   categoryField.value = record ? record.category : CATEGORIES[0];
   memoField.value = record?.memo ?? "";
@@ -189,8 +256,9 @@ async function start() {
         createdAt: new Date().toISOString(),
       });
       sheet.close();
+      const before = stats;
       await render(db);
-      celebrate(template.amount);
+      celebrate(template.amount, before);
     });
     const item = document.createElement("li");
     item.append(button);
@@ -213,25 +281,32 @@ async function start() {
     sheet.close();
     openForm();
   });
+  document.getElementById("open-spent").addEventListener("click", () => openForm(null, "spent"));
 
   document.getElementById("record-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     const amount = Number(amountField.value);
     const memo = memoField.value.trim();
-    if (editingRecord) {
-      await updateRecord(db, { ...editingRecord, amount, category: categoryField.value, memo });
-    } else {
+    const before = stats;
+    const isNew = !editingRecord;
+    if (isNew) {
       await addRecord(db, {
-        type: "gaman",
+        type: newRecordType,
         amount,
         category: categoryField.value,
         memo,
         createdAt: new Date().toISOString(),
       });
-      celebrate(amount);
+    } else {
+      await updateRecord(db, { ...editingRecord, amount, category: categoryField.value, memo });
     }
     formSheet.close();
     await render(db);
+    if (isNew && newRecordType === "spent") {
+      messageEl.textContent = SPENT_THANKS;
+    } else if (isNew) {
+      celebrate(amount, before);
+    }
   });
 
   // 誤操作を防ぐため、2回押すと削除する
@@ -247,6 +322,9 @@ async function start() {
   });
 
   await render(db);
+  if (stats.isLonely) {
+    messageEl.textContent = WELCOME_BACK;
+  }
 }
 
 start().catch((error) => {
