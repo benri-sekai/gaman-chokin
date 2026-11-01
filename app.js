@@ -646,6 +646,28 @@ async function start() {
     await render(db);
     setBackupStatus(`${latestRecords.length}件の記録と${latestGoals.length}件の目標を復元しました。`);
   });
+  const resetConfirm = document.getElementById("reset-confirm");
+  const resetStatus = document.getElementById("reset-status");
+  document.getElementById("reset-open").addEventListener("click", () => {
+    if (latestRecords.length === 0) {
+      resetStatus.textContent = "リセットする記録はありません。";
+      return;
+    }
+    document.getElementById("reset-summary").textContent =
+      `${latestRecords.length}件の記録をすべて削除します。元に戻すには、書き出したファイルが必要です。`;
+    resetStatus.textContent = "";
+    resetConfirm.hidden = false;
+  });
+  document.getElementById("reset-cancel").addEventListener("click", () => {
+    resetConfirm.hidden = true;
+  });
+  document.getElementById("reset-apply").addEventListener("click", async () => {
+    await writeStore(db, (store) => store.clear());
+    resetConfirm.hidden = true;
+    await render(db);
+    messageEl.textContent = "また一緒にがんばろう!";
+    resetStatus.textContent = "記録をリセットしました。";
+  });
   document.getElementById("open-goal").addEventListener("click", () => openGoalForm());
   document.getElementById("close-goal").addEventListener("click", () => goalSheet.close());
 

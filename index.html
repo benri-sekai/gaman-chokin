@@ -9,7 +9,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icon-180.png">
   <!-- 更新のたびに v の番号を上げ、古いキャッシュとの混在を防ぐ(sw.js の VERSION も同じ番号にする) -->
-  <link rel="stylesheet" href="style.css?v=10">
+  <link rel="stylesheet" href="style.css?v=11">
   <title>我慢貯金</title>
 </head>
 <body>
@@ -36,7 +36,7 @@
     <button class="primary" id="open-sheet" type="button">我慢した!</button>
     <button class="quiet" id="open-spent" type="button">使っちゃった…</button>
     <button class="quiet" id="backup-hint" type="button" hidden>そろそろ記録を保管しませんか?</button>
-    <p class="note">実際の貯金ではなく、記録上の金額です(ver.10)</p>
+    <p class="note">実際の貯金ではなく、記録上の金額です(ver.11)</p>
   </main>
 
   <main class="history" id="view-history" hidden>
@@ -83,6 +83,16 @@
       <button class="quiet full" id="import-cancel" type="button">やめる</button>
     </div>
     <p class="backup-status" id="backup-status" role="status"></p>
+
+    <h2 class="section-title">記録のリセット</h2>
+    <p class="note">すべての記録を削除して、キャラと貯金額を最初の状態に戻します。自分の目標は残ります。</p>
+    <button class="danger-outline" id="reset-open" type="button">記録をリセット</button>
+    <div class="import-confirm" id="reset-confirm" hidden>
+      <p id="reset-summary"></p>
+      <button class="danger-fill" id="reset-apply" type="button">削除してリセットする</button>
+      <button class="quiet full" id="reset-cancel" type="button">やめる</button>
+    </div>
+    <p class="backup-status" id="reset-status" role="status"></p>
   </main>
 
   <nav class="tabs" aria-label="画面の切り替え">
@@ -151,6 +161,6 @@
     </form>
   </dialog>
 
-  <script src="app.js?v=10"></script>
+  <script src="app.js?v=11"></script>
 </body>
 </html>

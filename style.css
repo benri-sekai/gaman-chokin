@@ -442,6 +442,28 @@ body {
   font-weight: 600;
 }
 
+.danger-outline,
+.danger-fill {
+  width: 100%;
+  min-height: 52px;
+  border: 1px solid #b91c1c;
+  border-radius: 14px;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.danger-outline {
+  margin-bottom: 12px;
+  background: none;
+  color: #b91c1c;
+}
+
+.danger-fill {
+  background: #b91c1c;
+  color: #ffffff;
+}
+
 .quiet.full {
   display: block;
   width: 100%;
