@@ -1,15 +1,15 @@
 // テンプレート管理ができるまでの初期データ
 const TEMPLATES = [
-  { name: "ゲーム課金", amount: 3000, category: "課金" },
-  { name: "パチンコ・スロット", amount: 10000, category: "ギャンブル" },
-  { name: "競馬・宝くじ", amount: 3000, category: "ギャンブル" },
-  { name: "外食", amount: 1500, category: "外食" },
-  { name: "デリバリー", amount: 2000, category: "外食" },
-  { name: "飲み会の二次会", amount: 3000, category: "外食" },
-  { name: "カフェ", amount: 500, category: "その他" },
-  { name: "コンビニのついで買い", amount: 500, category: "その他" },
-  { name: "ネット通販の衝動買い", amount: 3000, category: "その他" },
-  { name: "お酒・タバコ", amount: 800, category: "その他" },
+  { name: "ゲーム課金", amounts: [1000, 3000, 5000, 10000], category: "課金" },
+  { name: "パチンコ・スロット", amounts: [3000, 5000, 10000, 30000], category: "ギャンブル" },
+  { name: "競馬・宝くじ", amounts: [1000, 3000, 5000, 10000], category: "ギャンブル" },
+  { name: "外食", amounts: [1000, 1500, 3000, 5000], category: "外食" },
+  { name: "デリバリー", amounts: [1500, 2000, 3000, 5000], category: "外食" },
+  { name: "飲み会の二次会", amounts: [3000, 5000, 8000, 10000], category: "外食" },
+  { name: "カフェ", amounts: [300, 500, 800, 1000], category: "その他" },
+  { name: "コンビニのついで買い", amounts: [300, 500, 1000, 2000], category: "その他" },
+  { name: "ネット通販の衝動買い", amounts: [1000, 3000, 5000, 10000], category: "その他" },
+  { name: "お酒・タバコ", amounts: [500, 800, 1000, 3000], category: "その他" },
 ];
 
 const CATEGORIES = ["課金", "ギャンブル", "外食", "その他"];
@@ -122,6 +122,7 @@ const deleteGoalButton = document.getElementById("delete-goal");
 let editingRecord = null;
 let editingGoal = null;
 let newRecordType = "gaman";
+let newRecordTemplate = null;
 let stats = null;
 let moodTimer = null;
 
@@ -340,13 +341,14 @@ function resetDeleteButton() {
   delete deleteButton.dataset.armed;
 }
 
-function openForm(record = null, type = "gaman") {
+function openForm(record = null, type = "gaman", template = null) {
   editingRecord = record;
   newRecordType = type;
+  newRecordTemplate = template;
   const newTitle = type === "spent" ? "使っちゃったを記録" : "金額を入力して記録";
-  formTitle.textContent = record ? "記録を修正" : newTitle;
+  formTitle.textContent = record ? "記録を修正" : template?.name ?? newTitle;
   amountField.value = record ? record.amount : "";
-  categoryField.value = record ? record.category : CATEGORIES[0];
+  categoryField.value = record?.category ?? template?.category ?? CATEGORIES[0];
   memoField.value = record?.memo ?? "";
   deleteButton.hidden = !record;
   resetDeleteButton();
@@ -366,6 +368,44 @@ function openGoalForm(goal = null) {
   deleteGoalButton.hidden = !goal;
   resetDeleteGoalButton();
   goalSheet.showModal();
+}
+
+function showItemStep() {
+  document.getElementById("sheet-title").textContent = "何を我慢した?";
+  document.getElementById("item-step").hidden = false;
+  document.getElementById("amount-step").hidden = true;
+}
+
+function showAmountStep(db, template) {
+  document.getElementById("sheet-title").textContent = template.name;
+  document.getElementById("item-step").hidden = true;
+  document.getElementById("amount-step").hidden = false;
+  document.getElementById("amount-options").replaceChildren(
+    ...template.amounts.map((amount) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "amount-option";
+      button.textContent = yen(amount);
+      button.addEventListener("click", async () => {
+        await addRecord(db, {
+          type: "gaman",
+          name: template.name,
+          amount,
+          category: template.category,
+          createdAt: new Date().toISOString(),
+        });
+        sheet.close();
+        const before = stats;
+        await render(db);
+        celebrate(amount, before);
+      });
+      return button;
+    }),
+  );
+  document.getElementById("amount-custom").onclick = () => {
+    sheet.close();
+    openForm(null, "gaman", template);
+  };
 }
 
 function showView(name) {
@@ -391,24 +431,8 @@ async function start() {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "template";
-    const name = document.createElement("span");
-    name.textContent = template.name;
-    const amount = document.createElement("b");
-    amount.textContent = yen(template.amount);
-    button.append(name, amount);
-    button.addEventListener("click", async () => {
-      await addRecord(db, {
-        type: "gaman",
-        name: template.name,
-        amount: template.amount,
-        category: template.category,
-        createdAt: new Date().toISOString(),
-      });
-      sheet.close();
-      const before = stats;
-      await render(db);
-      celebrate(template.amount, before);
-    });
+    button.textContent = template.name;
+    button.addEventListener("click", () => showAmountStep(db, template));
     const item = document.createElement("li");
     item.append(button);
     templatesEl.append(item);
@@ -421,7 +445,11 @@ async function start() {
     categoryField.append(option);
   }
 
-  document.getElementById("open-sheet").addEventListener("click", () => sheet.showModal());
+  document.getElementById("open-sheet").addEventListener("click", () => {
+    showItemStep();
+    sheet.showModal();
+  });
+  document.getElementById("back-to-items").addEventListener("click", showItemStep);
   document.getElementById("close-sheet").addEventListener("click", () => sheet.close());
   document.getElementById("close-form").addEventListener("click", () => formSheet.close());
   document.getElementById("tab-home").addEventListener("click", () => showView("home"));
@@ -479,6 +507,7 @@ async function start() {
     if (isNew) {
       await addRecord(db, {
         type: newRecordType,
+        ...(newRecordTemplate && { name: newRecordTemplate.name }),
         amount,
         category: categoryField.value,
         memo,

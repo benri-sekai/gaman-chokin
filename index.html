@@ -9,7 +9,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icon-180.png">
   <!-- 更新のたびに v の番号を上げ、古いキャッシュとの混在を防ぐ -->
-  <link rel="stylesheet" href="style.css?v=5">
+  <link rel="stylesheet" href="style.css?v=6">
   <title>我慢貯金</title>
 </head>
 <body>
@@ -35,7 +35,7 @@
 
     <button class="primary" id="open-sheet" type="button">我慢した!</button>
     <button class="quiet" id="open-spent" type="button">使っちゃった…</button>
-    <p class="note">実際の貯金ではなく、記録上の金額です(ver.5)</p>
+    <p class="note">実際の貯金ではなく、記録上の金額です(ver.6)</p>
   </main>
 
   <main class="history" id="view-history" hidden>
@@ -74,8 +74,16 @@
       <h2 id="sheet-title">何を我慢した?</h2>
       <button class="close" id="close-sheet" type="button" aria-label="閉じる">×</button>
     </div>
-    <button class="secondary" id="open-manual" type="button">金額を入力して記録</button>
-    <ul class="templates" id="templates"></ul>
+    <div id="item-step">
+      <ul class="templates" id="templates"></ul>
+      <button class="quiet full" id="open-manual" type="button">項目を選ばずに入力</button>
+    </div>
+    <div id="amount-step" hidden>
+      <p class="sheet-lead">いくら我慢した?</p>
+      <div class="amount-options" id="amount-options"></div>
+      <button class="secondary" id="amount-custom" type="button">金額を入力</button>
+      <button class="quiet full" id="back-to-items" type="button">項目を選び直す</button>
+    </div>
   </dialog>
 
   <dialog class="sheet form-sheet" id="form-sheet" aria-labelledby="form-title">
@@ -120,6 +128,6 @@
     </form>
   </dialog>
 
-  <script src="app.js?v=5"></script>
+  <script src="app.js?v=6"></script>
 </body>
 </html>
