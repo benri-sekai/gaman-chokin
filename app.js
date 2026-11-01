@@ -46,6 +46,11 @@ const SUGGESTIONS = [
 ];
 const VISIBLE_SUGGESTIONS = 3;
 
+const BACKUP_APP_ID = "gaman-chokin";
+const BACKUP_VERSION = 1;
+const BACKUP_REMIND_MS = 30 * 24 * 60 * 60 * 1000;
+const LAST_EXPORT_KEY = "lastExportAt";
+
 const DB_NAME = "gaman-chokin";
 const STORE = "records";
 const GOAL_STORE = "goals";
@@ -95,6 +100,22 @@ function deleteRecord(db, id) {
   return writeStore(db, (store) => store.delete(id));
 }
 
+// 途中で失敗したら元のデータが残るよう、1回のトランザクションで置き換える
+function replaceAllData(db, records, goals) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction([STORE, GOAL_STORE], "readwrite");
+    const recordStore = tx.objectStore(STORE);
+    const goalStore = tx.objectStore(GOAL_STORE);
+    recordStore.clear();
+    goalStore.clear();
+    records.forEach((record) => recordStore.add(record));
+    goals.forEach((goal) => goalStore.add(goal));
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error);
+  });
+}
+
 function getAll(db, storeName) {
   return new Promise((resolve, reject) => {
     const request = db.transaction(storeName).objectStore(storeName).getAll();
@@ -124,6 +145,9 @@ const deleteGoalButton = document.getElementById("delete-goal");
 
 let editingRecord = null;
 let editingGoal = null;
+let latestRecords = [];
+let latestGoals = [];
+let pendingImport = null;
 let newRecordType = "gaman";
 let newRecordTemplate = null;
 let stats = null;
@@ -297,9 +321,157 @@ function renderMilestones() {
   }
 }
 
+function getLastExportTime() {
+  try {
+    const value = localStorage.getItem(LAST_EXPORT_KEY);
+    return value ? new Date(value).getTime() : null;
+  } catch {
+    return null;
+  }
+}
+
+function renderBackupStatus() {
+  const lastExport = getLastExportTime();
+  document.getElementById("last-export").textContent = lastExport
+    ? `最後の書き出し:${formatDate(lastExport)}`
+    : "まだ書き出していません";
+  const oldest = Math.min(...latestRecords.map((record) => new Date(record.createdAt).getTime()));
+  const since = lastExport ?? oldest;
+  document.getElementById("backup-hint").hidden =
+    latestRecords.length === 0 || Date.now() - since < BACKUP_REMIND_MS;
+}
+
+function backupFileName() {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `gaman-chokin-backup-${now.getFullYear()}-${month}-${day}.json`;
+}
+
+function setBackupStatus(text) {
+  document.getElementById("backup-status").textContent = text;
+}
+
+function markExported() {
+  try {
+    localStorage.setItem(LAST_EXPORT_KEY, new Date().toISOString());
+  } catch {
+    // 保存できなくても書き出し自体は成功している
+  }
+  renderBackupStatus();
+}
+
+// iPhoneは共有シートから「ファイルに保存」する。共有できない環境はダウンロードにする
+async function exportBackup() {
+  const body = JSON.stringify(
+    {
+      app: BACKUP_APP_ID,
+      version: BACKUP_VERSION,
+      exportedAt: new Date().toISOString(),
+      records: latestRecords,
+      goals: latestGoals,
+    },
+    null,
+    2,
+  );
+  const file = new File([body], backupFileName(), { type: "application/json" });
+  if (navigator.canShare?.({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file] });
+    } catch (error) {
+      if (error.name !== "AbortError") {
+        setBackupStatus("書き出せませんでした。もう一度お試しください。");
+      }
+      return;
+    }
+  } else {
+    const url = URL.createObjectURL(file);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = file.name;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  markExported();
+  setBackupStatus(`${latestRecords.length}件の記録と${latestGoals.length}件の目標を書き出しました。`);
+}
+
+function isValidDate(value) {
+  return typeof value === "string" && !Number.isNaN(new Date(value).getTime());
+}
+
+function isValidAmount(value) {
+  return Number.isSafeInteger(value) && value > 0;
+}
+
+// 不正なファイルで記録を壊さないよう、すべて確認してから必要な項目だけ取り出す
+function parseBackup(text) {
+  const data = JSON.parse(text);
+  if (data?.app !== BACKUP_APP_ID || !Array.isArray(data.records) || !Array.isArray(data.goals)) {
+    throw new Error("not a backup");
+  }
+  if (data.version > BACKUP_VERSION) {
+    throw new Error("newer backup");
+  }
+  const records = data.records.map((record) => {
+    const isValid =
+      (record?.type === "gaman" || record?.type === "spent") &&
+      isValidAmount(record.amount) &&
+      typeof record.category === "string" &&
+      isValidDate(record.createdAt);
+    if (!isValid) throw new Error("invalid record");
+    return {
+      type: record.type,
+      amount: record.amount,
+      category: record.category,
+      createdAt: record.createdAt,
+      ...(typeof record.name === "string" && { name: record.name }),
+      ...(typeof record.memo === "string" && { memo: record.memo }),
+    };
+  });
+  const goals = data.goals.map((goal) => {
+    const isValid =
+      typeof goal?.name === "string" &&
+      goal.name.trim() !== "" &&
+      isValidAmount(goal.amount) &&
+      isValidDate(goal.createdAt);
+    if (!isValid) throw new Error("invalid goal");
+    return { name: goal.name, amount: goal.amount, createdAt: goal.createdAt };
+  });
+  return { records, goals, exportedAt: isValidDate(data.exportedAt) ? data.exportedAt : null };
+}
+
+function clearPendingImport() {
+  pendingImport = null;
+  document.getElementById("import-confirm").hidden = true;
+}
+
+async function chooseImportFile(input) {
+  const file = input.files[0];
+  // 同じファイルをもう一度選べるようにする
+  input.value = "";
+  if (!file) return;
+  clearPendingImport();
+  try {
+    pendingImport = parseBackup(await file.text());
+  } catch {
+    setBackupStatus("このファイルは読み込めませんでした。今のデータは変更していません。");
+    return;
+  }
+  const date = pendingImport.exportedAt ? formatDate(pendingImport.exportedAt) : "不明";
+  document.getElementById("import-summary").textContent =
+    `書き出し日:${date}、記録${pendingImport.records.length}件、目標${pendingImport.goals.length}件。` +
+    `今の記録${latestRecords.length}件と目標${latestGoals.length}件は、この内容に置き換わります。`;
+  document.getElementById("import-confirm").hidden = false;
+  setBackupStatus("");
+}
+
 async function render(db) {
   const [records, goals] = await Promise.all([getAll(db, STORE), getAll(db, GOAL_STORE)]);
+  latestRecords = records;
+  latestGoals = goals;
   stats = getStats(records, goals);
+  renderBackupStatus();
   totalEl.textContent = stats.balance.toLocaleString("ja-JP");
   countEl.textContent = stats.gamanCount.toLocaleString("ja-JP");
   document.getElementById("cumulative").textContent = stats.exp.toLocaleString("ja-JP");
@@ -412,7 +584,7 @@ function showAmountStep(db, template) {
 }
 
 function showView(name) {
-  for (const view of ["home", "history", "milestones"]) {
+  for (const view of ["home", "history", "milestones", "settings"]) {
     const isCurrent = view === name;
     document.getElementById(`view-${view}`).hidden = !isCurrent;
     const tab = document.getElementById(`tab-${view}`);
@@ -458,6 +630,22 @@ async function start() {
   document.getElementById("tab-home").addEventListener("click", () => showView("home"));
   document.getElementById("tab-history").addEventListener("click", () => showView("history"));
   document.getElementById("tab-milestones").addEventListener("click", () => showView("milestones"));
+  document.getElementById("tab-settings").addEventListener("click", () => showView("settings"));
+  document.getElementById("backup-hint").addEventListener("click", () => showView("settings"));
+  document.getElementById("export-data").addEventListener("click", exportBackup);
+  document.getElementById("import-file").addEventListener("change", (event) => chooseImportFile(event.target));
+  document.getElementById("import-cancel").addEventListener("click", clearPendingImport);
+  document.getElementById("import-apply").addEventListener("click", async () => {
+    try {
+      await replaceAllData(db, pendingImport.records, pendingImport.goals);
+    } catch {
+      setBackupStatus("読み込めませんでした。今のデータは変更していません。");
+      return;
+    }
+    clearPendingImport();
+    await render(db);
+    setBackupStatus(`${latestRecords.length}件の記録と${latestGoals.length}件の目標を復元しました。`);
+  });
   document.getElementById("open-goal").addEventListener("click", () => openGoalForm());
   document.getElementById("close-goal").addEventListener("click", () => goalSheet.close());
 

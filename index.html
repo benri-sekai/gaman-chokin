@@ -9,7 +9,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icon-180.png">
   <!-- 更新のたびに v の番号を上げ、古いキャッシュとの混在を防ぐ -->
-  <link rel="stylesheet" href="style.css?v=7">
+  <link rel="stylesheet" href="style.css?v=8">
   <title>我慢貯金</title>
 </head>
 <body>
@@ -35,7 +35,8 @@
 
     <button class="primary" id="open-sheet" type="button">我慢した!</button>
     <button class="quiet" id="open-spent" type="button">使っちゃった…</button>
-    <p class="note">実際の貯金ではなく、記録上の金額です(ver.7)</p>
+    <button class="quiet" id="backup-hint" type="button" hidden>そろそろ記録を保管しませんか?</button>
+    <p class="note">実際の貯金ではなく、記録上の金額です(ver.8)</p>
   </main>
 
   <main class="history" id="view-history" hidden>
@@ -63,10 +64,32 @@
     </section>
   </main>
 
+  <main class="history" id="view-settings" hidden>
+    <h1>設定</h1>
+    <h2 class="section-title">データの保管</h2>
+    <p class="note">記録はこの端末の中だけに保存されています。アプリの削除や機種変更に備えて、ときどきファイルに保管してください。</p>
+    <p class="note" id="last-export"></p>
+    <button class="primary backup-action" id="export-data" type="button">ファイルに書き出す</button>
+
+    <h2 class="section-title">データの復元</h2>
+    <p class="note">書き出したファイルから、記録と目標を元に戻します。</p>
+    <label class="secondary file-button">
+      ファイルを選ぶ
+      <input class="visually-hidden" id="import-file" type="file" accept=".json,application/json">
+    </label>
+    <div class="import-confirm" id="import-confirm" hidden>
+      <p id="import-summary"></p>
+      <button class="primary" id="import-apply" type="button">この内容に置き換える</button>
+      <button class="quiet full" id="import-cancel" type="button">やめる</button>
+    </div>
+    <p class="backup-status" id="backup-status" role="status"></p>
+  </main>
+
   <nav class="tabs" aria-label="画面の切り替え">
     <button class="tab" id="tab-home" type="button" aria-current="page">ホーム</button>
     <button class="tab" id="tab-history" type="button">履歴</button>
     <button class="tab" id="tab-milestones" type="button">目標</button>
+    <button class="tab" id="tab-settings" type="button">設定</button>
   </nav>
 
   <dialog class="sheet" id="sheet" aria-labelledby="sheet-title">
@@ -128,6 +151,6 @@
     </form>
   </dialog>
 
-  <script src="app.js?v=7"></script>
+  <script src="app.js?v=8"></script>
 </body>
 </html>
