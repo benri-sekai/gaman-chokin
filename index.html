@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#fff8ee">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="我慢貯金">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icon-180.png">
+  <link rel="stylesheet" href="style.css">
+  <title>我慢貯金</title>
+</head>
+<body>
+  <main class="home">
+    <!-- キャラ画像ができるまでの仮の表示 -->
+    <div class="character" aria-hidden="true"></div>
+    <p class="message" id="message">今日もよく来てくれたね!</p>
+
+    <section class="savings" aria-label="現在の貯金額">
+      <h1>現在の我慢貯金</h1>
+      <p class="amount"><span id="total">0</span><small>円</small></p>
+      <p class="count"><span id="count">0</span>回 我慢できた</p>
+    </section>
+
+    <button class="primary" id="open-sheet" type="button">我慢した!</button>
+    <p class="note">実際の貯金ではなく、記録上の金額です</p>
+  </main>
+
+  <dialog class="sheet" id="sheet" aria-labelledby="sheet-title">
+    <div class="sheet-header">
+      <h2 id="sheet-title">何を我慢した?</h2>
+      <button class="close" id="close-sheet" type="button" aria-label="閉じる">×</button>
+    </div>
+    <ul class="templates" id="templates"></ul>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>
