@@ -163,3 +163,155 @@ body {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+
+[hidden] {
+  display: none !important;
+}
+
+body {
+  padding-bottom: calc(env(safe-area-inset-bottom) + 64px);
+}
+
+.tabs {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  padding-bottom: env(safe-area-inset-bottom);
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+
+.tab {
+  min-height: 56px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tab[aria-current="page"] {
+  color: var(--accent);
+}
+
+.history {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: calc(env(safe-area-inset-top) + 24px) 16px 24px;
+}
+
+.history h1 {
+  margin: 0 0 12px;
+  font-size: 1.4rem;
+}
+
+.records {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.record {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 60px;
+  padding: 10px 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.record-main {
+  min-width: 0;
+}
+
+.record-title {
+  display: block;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.record-sub {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.8rem;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.record b {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.secondary {
+  width: 100%;
+  min-height: 52px;
+  margin-bottom: 12px;
+  border: 1px solid var(--accent);
+  border-radius: 14px;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* キーボードに隠れないよう、画面の上側に表示する */
+.form-sheet {
+  margin: calc(env(safe-area-inset-top) + 16px) auto auto;
+  width: calc(100% - 32px);
+  border-radius: 20px;
+}
+
+.field {
+  display: block;
+  margin-bottom: 14px;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.field span {
+  display: block;
+  margin-bottom: 6px;
+}
+
+/* 16px未満だとiPhoneで入力時に画面が拡大される */
+.field input,
+.field select {
+  width: 100%;
+  min-height: 48px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 400;
+}
+
+.danger {
+  width: 100%;
+  min-height: 48px;
+  margin-top: 10px;
+  border: 0;
+  background: none;
+  color: #b91c1c;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}

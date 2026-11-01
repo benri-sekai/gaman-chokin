@@ -12,7 +12,7 @@
   <title>我慢貯金</title>
 </head>
 <body>
-  <main class="home">
+  <main class="home" id="view-home">
     <!-- キャラ画像ができるまでの仮の表示 -->
     <div class="character" aria-hidden="true"></div>
     <p class="message" id="message">今日もよく来てくれたね!</p>
@@ -27,12 +27,47 @@
     <p class="note">実際の貯金ではなく、記録上の金額です</p>
   </main>
 
+  <main class="history" id="view-history" hidden>
+    <h1>履歴</h1>
+    <p class="note" id="history-empty">まだ記録がありません</p>
+    <ul class="records" id="records"></ul>
+  </main>
+
+  <nav class="tabs" aria-label="画面の切り替え">
+    <button class="tab" id="tab-home" type="button" aria-current="page">ホーム</button>
+    <button class="tab" id="tab-history" type="button">履歴</button>
+  </nav>
+
   <dialog class="sheet" id="sheet" aria-labelledby="sheet-title">
     <div class="sheet-header">
       <h2 id="sheet-title">何を我慢した?</h2>
       <button class="close" id="close-sheet" type="button" aria-label="閉じる">×</button>
     </div>
+    <button class="secondary" id="open-manual" type="button">金額を入力して記録</button>
     <ul class="templates" id="templates"></ul>
+  </dialog>
+
+  <dialog class="sheet form-sheet" id="form-sheet" aria-labelledby="form-title">
+    <form id="record-form">
+      <div class="sheet-header">
+        <h2 id="form-title">金額を入力して記録</h2>
+        <button class="close" id="close-form" type="button" aria-label="閉じる">×</button>
+      </div>
+      <label class="field">
+        <span>金額(円)</span>
+        <input id="field-amount" type="number" inputmode="numeric" min="1" max="9999999" step="1" required>
+      </label>
+      <label class="field">
+        <span>カテゴリ</span>
+        <select id="field-category"></select>
+      </label>
+      <label class="field">
+        <span>メモ(任意)</span>
+        <input id="field-memo" type="text" maxlength="100">
+      </label>
+      <button class="primary" type="submit">保存する</button>
+      <button class="danger" id="delete-record" type="button" hidden>この記録を削除</button>
+    </form>
   </dialog>
 
   <script src="app.js"></script>
