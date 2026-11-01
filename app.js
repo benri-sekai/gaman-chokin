@@ -62,7 +62,10 @@ function openDb() {
         request.result.createObjectStore(GOAL_STORE, { keyPath: "id", autoIncrement: true });
       }
     };
-    request.onblocked = () => reject(new Error("別の画面がデータを使用中です"));
+    // 古い画面が閉じられると onsuccess に進むので、案内だけ出して待つ
+    request.onblocked = () => {
+      messageEl.textContent = "別のタブで開いているこのアプリを閉じてください";
+    };
     request.onsuccess = () => {
       request.result.onversionchange = () => request.result.close();
       resolve(request.result);
@@ -538,9 +541,7 @@ async function start() {
   });
 
   await render(db);
-  if (stats.isLonely) {
-    messageEl.textContent = WELCOME_BACK;
-  }
+  messageEl.textContent = stats.isLonely ? WELCOME_BACK : "今日もよく来てくれたね!";
 }
 
 start().catch((error) => {
