@@ -27,8 +27,15 @@ const WELCOME_BACK = "ひさしぶり!また来てくれてうれしいよ";
 // 進化に必要な累計額。実際に使いながら調整する
 const STAGES = [
   { id: "egg", name: "たまご", minExp: 0 },
-  { id: "child", name: "子ども", minExp: 5000 },
-  { id: "adult", name: "大人", minExp: 30000 },
+  { id: "baby", name: "赤ちゃん", minExp: 5000, image: 1 },
+  { id: "child", name: "子ども", minExp: 30000, image: 2 },
+  { id: "adult", name: "大人", minExp: 100000, image: 3 },
+];
+// たまごから生まれるタイプ。最初の我慢の記録をもとにランダムで決まる
+const TYPES = [
+  { id: "fire", name: "ほのお" },
+  { id: "leaf", name: "くさ" },
+  { id: "water", name: "みず" },
 ];
 const LEVEL_UNIT = 500;
 const SAD_AFTER_MS = 3 * 24 * 60 * 60 * 1000;
@@ -238,6 +245,21 @@ function getMilestones(timeline, goals) {
   return [...fromGoals, ...fromSuggestions];
 }
 
+// 保存しなくても毎回同じ結果になるよう、最初の我慢の日時から決める。
+// リセットすると最初の記録が変わり、次のたまごはまたランダムになる
+function pickType(gaman) {
+  const first = gaman.reduce((oldest, record) => (oldest && oldest <= record.createdAt ? oldest : record.createdAt), "");
+  let hash = 0;
+  for (const char of first) {
+    hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  }
+  return TYPES[hash % TYPES.length];
+}
+
+function characterName(stats) {
+  return stats.stage.id === "egg" ? stats.stage.name : `${stats.type.name}の${stats.stage.name}`;
+}
+
 function getStats(records, goals) {
   const sumOf = (list) => list.reduce((sum, record) => sum + record.amount, 0);
   const gaman = records.filter((record) => !isSpent(record));
@@ -260,6 +282,7 @@ function getStats(records, goals) {
     exp,
     level,
     stage: STAGES.filter((stage) => exp >= stage.minExp).pop(),
+    type: pickType(gaman),
     isLonely: records.length > 0 && Date.now() - lastTime >= SAD_AFTER_MS,
   };
 }
@@ -751,13 +774,13 @@ async function render(db) {
   totalEl.textContent = stats.balance.toLocaleString("ja-JP");
   countEl.textContent = stats.gamanCount.toLocaleString("ja-JP");
   document.getElementById("cumulative").textContent = stats.exp.toLocaleString("ja-JP");
-  document.getElementById("stage").textContent = stats.stage.name;
+  document.getElementById("stage").textContent = characterName(stats);
   document.getElementById("level").textContent = stats.level;
   const start = levelStartExp(stats.level);
   const next = levelStartExp(stats.level + 1);
   document.getElementById("level-bar").style.width = `${((stats.exp - start) / (next - start)) * 100}%`;
   document.getElementById("next-level").textContent = (next - stats.exp).toLocaleString("ja-JP");
-  characterEl.dataset.stage = stats.stage.id;
+  characterEl.src = stats.stage.image ? `chara/${stats.type.id}-${stats.stage.image}.png` : "chara/egg.png";
   clearTimeout(moodTimer);
   characterEl.dataset.mood = stats.isLonely ? "sad" : "normal";
   renderHistory(records);
@@ -775,10 +798,14 @@ function celebrate(amount, before) {
   const newlyAchieved = stats.milestones
     .filter((milestone) => milestone.achievedTime !== null && !wasAchieved.has(milestone.key))
     .sort((a, b) => b.amount - a.amount);
-  if (newlyAchieved.length > 0) {
+  // 進化はめったに起きないので、目標の達成より先に知らせる
+  if (stats.stage.id !== before.stage.id) {
+    message =
+      before.stage.id === "egg"
+        ? `たまごが割れて、${stats.type.name}の子が生まれたよ!`
+        : `+${yen(amount)}! ${characterName(stats)}に進化したよ!`;
+  } else if (newlyAchieved.length > 0) {
     message = `+${yen(amount)}! 「${newlyAchieved[0].name}」を達成!`;
-  } else if (stats.stage.id !== before.stage.id) {
-    message = `+${yen(amount)}! ${stats.stage.name}に進化したよ!`;
   } else if (stats.level > before.level) {
     message = `+${yen(amount)}! Lv.${stats.level}にレベルアップ!`;
   }

@@ -1,6 +1,6 @@
 // 更新するときは VERSION と index.html の v= と ver. を同じ番号に上げる。
 // 番号が変わると新しいファイル一式を取得してから入れ替わる。
-const VERSION = 12;
+const VERSION = 13;
 const CACHE_PREFIX = "gaman-chokin-";
 const CACHE = `${CACHE_PREFIX}${VERSION}`;
 const ASSETS = [
@@ -10,6 +10,9 @@ const ASSETS = [
   "manifest.webmanifest",
   "icon-180.png",
   "icon-512.png",
+  ...["egg", "fire-1", "fire-2", "fire-3", "leaf-1", "leaf-2", "leaf-3", "water-1", "water-2", "water-3"].map(
+    (name) => `chara/${name}.png`,
+  ),
 ];
 
 self.addEventListener("install", (event) => {

@@ -5,7 +5,6 @@
   --muted: #6f6257;
   --accent: #c2410c;
   --accent-text: #ffffff;
-  --slime: #7fd1ae;
   --border: #eadfce;
 }
 
@@ -33,76 +32,20 @@ body {
 }
 
 .character {
-  position: relative;
-  width: 150px;
-  height: 120px;
-  background: var(--slime);
-  border-radius: 50% 50% 44% 44% / 66% 66% 34% 34%;
-  transition: transform 0.2s;
-}
-
-.character[data-stage="egg"] {
-  width: 90px;
-  height: 112px;
-  background: #f5e6c8;
-  border: 2px solid var(--border);
-  border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
-}
-
-.character[data-stage="child"] {
-  width: 110px;
-  height: 88px;
-}
-
-.character[data-stage="egg"] span {
-  display: none;
-}
-
-.character .eye {
-  position: absolute;
-  top: 42%;
-  left: 30%;
-  width: 10px;
-  height: 14px;
-  background: var(--text);
-  border-radius: 50%;
-}
-
-.character .eye + .eye {
-  left: auto;
-  right: 30%;
-}
-
-.character .mouth {
-  position: absolute;
-  top: 60%;
-  left: 50%;
-  width: 18px;
-  height: 9px;
-  margin-left: -9px;
-  border-bottom: 3px solid var(--text);
-  border-radius: 0 0 18px 18px;
+  width: 180px;
+  height: 180px;
+  object-fit: contain;
+  transition: transform 0.2s, filter 0.2s;
 }
 
 .character[data-mood="happy"] {
   transform: translateY(-14px) scale(1.06);
 }
 
-.character[data-mood="happy"] .mouth {
-  height: 12px;
-  background: var(--text);
-}
-
-.character[data-mood="sad"] .eye {
-  height: 6px;
-  margin-top: 6px;
-}
-
-.character[data-mood="sad"] .mouth {
-  top: 66%;
-  border-top: 3px solid var(--text);
-  border-bottom: 0;
-  border-radius: 18px 18px 0 0;
+/* 3日以上記録がないときは、色をくすませてうつむかせる */
+.character[data-mood="sad"] {
+  filter: saturate(0.35) brightness(0.97);
+  transform: translateY(8px) rotate(-4deg);
 }
 
 .growth {

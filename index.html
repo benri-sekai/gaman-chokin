@@ -9,15 +9,12 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icon-180.png">
   <!-- 更新のたびに v の番号を上げ、古いキャッシュとの混在を防ぐ(sw.js の VERSION も同じ番号にする) -->
-  <link rel="stylesheet" href="style.css?v=12">
+  <link rel="stylesheet" href="style.css?v=13">
   <title>我慢貯金</title>
 </head>
 <body>
   <main class="home" id="view-home">
-    <!-- キャラ画像ができるまでの仮の表示 -->
-    <div class="character" id="character" data-stage="egg" data-mood="normal" aria-hidden="true">
-      <span class="eye"></span><span class="eye"></span><span class="mouth"></span>
-    </div>
+    <img class="character" id="character" src="chara/egg.png" alt="" data-mood="normal" width="180" height="180">
     <p class="message" id="message">今日もよく来てくれたね!</p>
 
     <section class="growth" aria-label="キャラの成長">
@@ -36,7 +33,7 @@
     <button class="primary" id="open-sheet" type="button">我慢した!</button>
     <button class="quiet" id="open-spent" type="button">使っちゃった…</button>
     <button class="quiet" id="backup-hint" type="button" hidden>そろそろ記録を保管しませんか?</button>
-    <p class="note">実際の貯金ではなく、記録上の金額です(ver.12)</p>
+    <p class="note">実際の貯金ではなく、記録上の金額です(ver.13)</p>
   </main>
 
   <main class="history" id="view-history" hidden>
@@ -211,6 +208,6 @@
     </form>
   </dialog>
 
-  <script src="app.js?v=12"></script>
+  <script src="app.js?v=13"></script>
 </body>
 </html>
