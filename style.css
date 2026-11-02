@@ -6,6 +6,44 @@
   --accent: #c2410c;
   --accent-text: #ffffff;
   --border: #eadfce;
+  --bg-pattern: linear-gradient(transparent, transparent);
+}
+
+/* 背景の候補。--bg は無地の部分の色、--bg-pattern はその上に重ねる模様 */
+[data-bg="cream"] { --bg: #fff8ee; --bg-pattern: linear-gradient(transparent, transparent); }
+[data-bg="sakura"] { --bg: #fdeef1; --bg-pattern: linear-gradient(transparent, transparent); }
+[data-bg="sora"] { --bg: #e9f3fb; --bg-pattern: linear-gradient(transparent, transparent); }
+[data-bg="wakaba"] { --bg: #edf6e6; --bg-pattern: linear-gradient(transparent, transparent); }
+[data-bg="lavender"] { --bg: #f1edf9; --bg-pattern: linear-gradient(transparent, transparent); }
+[data-bg="lemon"] { --bg: #fdf8dc; --bg-pattern: linear-gradient(transparent, transparent); }
+
+[data-bg="dots"] {
+  --bg: #fff8ee;
+  --bg-pattern: radial-gradient(circle, #f3d6ae 2.5px, transparent 3px) 0 0 / 22px 22px;
+}
+
+[data-bg="stripe"] {
+  --bg: #fdeef1;
+  --bg-pattern: repeating-linear-gradient(135deg, #fff8f9 0 12px, transparent 12px 24px);
+}
+
+[data-bg="gingham"] {
+  --bg: #f4f9fd;
+  --bg-pattern:
+    linear-gradient(90deg, rgb(120 180 225 / 18%) 50%, transparent 0) 0 0 / 28px 28px,
+    linear-gradient(rgb(120 180 225 / 18%) 50%, transparent 0) 0 0 / 28px 28px;
+}
+
+[data-bg="grid"] {
+  --bg: #f7fbf3;
+  --bg-pattern:
+    linear-gradient(#dfecd5 1px, transparent 1px) 0 0 / 20px 20px,
+    linear-gradient(90deg, #dfecd5 1px, transparent 1px) 0 0 / 20px 20px;
+}
+
+[data-bg="stars"] {
+  --bg: #f1edf9;
+  --bg-pattern: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48'%3E%3Cpath d='M12 5l2 4.3 4.7.6-3.5 3.2.9 4.6L12 15.4l-4.1 2.3.9-4.6-3.5-3.2 4.7-.6z' fill='%23dcd0f2'/%3E%3Ccircle cx='36' cy='34' r='2' fill='%23dcd0f2'/%3E%3C/svg%3E") 0 0 / 48px 48px;
 }
 
 * {
@@ -15,7 +53,7 @@
 body {
   margin: 0;
   min-height: 100dvh;
-  background: var(--bg);
+  background: var(--bg-pattern), var(--bg);
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif;
 }
@@ -688,4 +726,42 @@ button.milestone {
   color: var(--accent);
   font-size: 0.8rem;
   font-weight: 700;
+}
+
+.bg-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  gap: 8px;
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.bg-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 4px;
+  border: 2px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.bg-option[aria-pressed="true"] {
+  border-color: var(--accent);
+  font-weight: 700;
+}
+
+.bg-swatch {
+  width: 100%;
+  height: 48px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-pattern), var(--bg);
 }

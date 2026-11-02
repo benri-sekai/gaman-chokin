@@ -35,6 +35,23 @@ const STAGES = [
 const EGG_STARTS_KEY = "eggStarts";
 // キャラごとに育てきった回数。図鑑と同じくリセットしても残す
 const RAISED_KEY = "raised";
+// 次のたまごで避ける属性(前のキャラの属性)
+const AVOID_TYPE_KEY = "avoidType";
+const BACKGROUND_KEY = "background";
+// 見た目は style.css の [data-bg] で決める。color はスマホ上部のバーの色
+const BACKGROUNDS = [
+  { id: "cream", name: "クリーム", color: "#fff8ee" },
+  { id: "sakura", name: "さくら", color: "#fdeef1" },
+  { id: "sora", name: "そら", color: "#e9f3fb" },
+  { id: "wakaba", name: "わかば", color: "#edf6e6" },
+  { id: "lavender", name: "ラベンダー", color: "#f1edf9" },
+  { id: "lemon", name: "レモン", color: "#fdf8dc" },
+  { id: "dots", name: "水玉", color: "#fff8ee" },
+  { id: "stripe", name: "ストライプ", color: "#fdeef1" },
+  { id: "gingham", name: "ギンガム", color: "#f4f9fd" },
+  { id: "grid", name: "方眼", color: "#f7fbf3" },
+  { id: "stars", name: "ほし", color: "#f1edf9" },
+];
 const EGG = {
   id: "egg",
   name: "コツコツのたまご",
@@ -314,13 +331,25 @@ function getMilestones(timeline, goals) {
 
 // 保存しなくても毎回同じ結果になるよう、最初の我慢の日時から決める。
 // リセットすると最初の記録が変わり、次のたまごはまたランダムになる
-function pickType(gaman) {
+// avoid には前のキャラの属性が入り、同じ属性が続けて生まれないようにする
+function pickType(gaman, avoid) {
   const first = gaman.reduce((oldest, record) => (oldest && oldest <= record.createdAt ? oldest : record.createdAt), "");
   let hash = 0;
   for (const char of first) {
     hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
   }
-  return TYPES[hash % TYPES.length];
+  const candidates = TYPES.filter((type) => type.id !== avoid);
+  return candidates[hash % candidates.length];
+}
+
+function loadAvoidType() {
+  const value = readStorage(AVOID_TYPE_KEY, null);
+  return TYPES.some((type) => type.id === value) ? value : null;
+}
+
+// たまごに戻すときに呼ぶ。まだ生まれていなければ、前に決めた属性をそのまま避ける
+function rememberCurrentType() {
+  if (stats.stage.image) writeStorage(AVOID_TYPE_KEY, stats.type.id);
 }
 
 function characterName(stats) {
@@ -354,6 +383,41 @@ function writeStorage(key, value) {
   } catch {
     // 保存できない環境では、今の画面の表示だけになる
   }
+}
+
+function loadBackground() {
+  const value = readStorage(BACKGROUND_KEY, null);
+  return BACKGROUNDS.some((background) => background.id === value) ? value : "cream";
+}
+
+function applyBackground(id) {
+  const background = BACKGROUNDS.find((candidate) => candidate.id === id) ?? BACKGROUNDS[0];
+  document.documentElement.dataset.bg = background.id;
+  document.querySelector('meta[name="theme-color"]').content = background.color;
+  writeStorage(BACKGROUND_KEY, background.id);
+  for (const button of document.querySelectorAll(".bg-option")) {
+    button.setAttribute("aria-pressed", button.dataset.option === background.id);
+  }
+}
+
+function renderBackgroundOptions() {
+  document.getElementById("backgrounds").replaceChildren(
+    ...BACKGROUNDS.map((background) => {
+      const swatch = document.createElement("span");
+      swatch.className = "bg-swatch";
+      swatch.dataset.bg = background.id;
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "bg-option";
+      button.dataset.option = background.id;
+      button.append(swatch, background.name);
+      button.addEventListener("click", () => applyBackground(background.id));
+      const item = document.createElement("li");
+      item.append(button);
+      return item;
+    }),
+  );
+  applyBackground(loadBackground());
 }
 
 function loadEggStarts() {
@@ -432,7 +496,7 @@ function getStats(records, goals) {
     characterExp,
     level,
     stage: STAGES.filter((stage) => characterExp >= stage.minExp).pop(),
-    type: pickType(ownGaman),
+    type: pickType(ownGaman, loadAvoidType()),
     isLonely: records.length > 0 && Date.now() - lastTime >= SAD_AFTER_MS,
   };
 }
@@ -794,6 +858,8 @@ async function exportBackup() {
       discovered: [...loadDiscovered()],
       eggStarts: loadEggStarts(),
       raised: loadRaised(),
+      avoidType: loadAvoidType(),
+      background: loadBackground(),
     },
     null,
     2,
@@ -899,6 +965,8 @@ function parseBackup(text) {
     discovered,
     eggStarts,
     raised,
+    avoidType: TYPES.some((type) => type.id === data.avoidType) ? data.avoidType : null,
+    background: BACKGROUNDS.some((background) => background.id === data.background) ? data.background : null,
     exportedAt: isValidDate(data.exportedAt) ? data.exportedAt : null,
   };
 }
@@ -1068,6 +1136,7 @@ async function startNextEgg(db) {
   const raised = loadRaised();
   raised[finishedId] = (raised[finishedId] ?? 0) + 1;
   writeStorage(RAISED_KEY, raised);
+  rememberCurrentType();
   writeStorage(EGG_STARTS_KEY, [...loadEggStarts(), new Date().toISOString()]);
   await render(db);
   messageEl.textContent = `${finished}は図鑑で見守っているよ。新しいたまごが届いた!`;
@@ -1189,6 +1258,7 @@ async function start() {
   document.getElementById("back-to-items").addEventListener("click", showItemStep);
   document.getElementById("close-sheet").addEventListener("click", () => sheet.close());
   document.getElementById("close-form").addEventListener("click", () => formSheet.close());
+  renderBackgroundOptions();
   const zukanSheet = document.getElementById("zukan-sheet");
   document.getElementById("open-zukan").addEventListener("click", () => zukanSheet.showModal());
   characterEl.addEventListener("click", () => zukanSheet.showModal());
@@ -1293,6 +1363,8 @@ async function start() {
     mergeRaised(pendingImport.raised);
     // 今のキャラがどこから育っているかは記録と対になるので、記録と一緒に置き換える
     writeStorage(EGG_STARTS_KEY, pendingImport.eggStarts);
+    writeStorage(AVOID_TYPE_KEY, pendingImport.avoidType);
+    if (pendingImport.background) applyBackground(pendingImport.background);
     clearPendingImport();
     await render(db);
     setBackupStatus(
@@ -1316,6 +1388,7 @@ async function start() {
   });
   document.getElementById("reset-apply").addEventListener("click", async () => {
     await writeStore(db, (store) => store.clear());
+    rememberCurrentType();
     writeStorage(EGG_STARTS_KEY, []);
     resetConfirm.hidden = true;
     await render(db);

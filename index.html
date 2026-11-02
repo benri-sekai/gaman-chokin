@@ -9,8 +9,14 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icon-180.png">
   <!-- 更新のたびに v の番号を上げ、古いキャッシュとの混在を防ぐ(sw.js の VERSION も同じ番号にする) -->
-  <link rel="stylesheet" href="style.css?v=15">
+  <link rel="stylesheet" href="style.css?v=16">
   <title>我慢貯金</title>
+  <script>
+    // 前回の背景を、画面が出る前に反映する(選び方は app.js の BACKGROUNDS)
+    try {
+      document.documentElement.dataset.bg = JSON.parse(localStorage.getItem("background")) || "cream";
+    } catch {}
+  </script>
 </head>
 <body>
   <main class="home" id="view-home">
@@ -35,7 +41,7 @@
     <button class="primary" id="open-sheet" type="button">我慢した!</button>
     <button class="quiet" id="open-spent" type="button">使っちゃった…</button>
     <button class="quiet" id="backup-hint" type="button" hidden>そろそろ記録を保管しませんか?</button>
-    <p class="note">実際の貯金ではなく、記録上の金額です(ver.15)</p>
+    <p class="note">実際の貯金ではなく、記録上の金額です(ver.16)</p>
   </main>
 
   <main class="history" id="view-history" hidden>
@@ -90,6 +96,9 @@
 
   <main class="history" id="view-settings" hidden>
     <h1>設定</h1>
+    <h2 class="section-title">背景</h2>
+    <ul class="bg-options" id="backgrounds" aria-label="背景を選ぶ"></ul>
+
     <h2 class="section-title">データの保管</h2>
     <p class="note">記録はこの端末の中だけに保存されています。アプリの削除や機種変更に備えて、ときどきファイルに保管してください。</p>
     <p class="note" id="last-export"></p>
@@ -219,6 +228,6 @@
     </form>
   </dialog>
 
-  <script src="app.js?v=15"></script>
+  <script src="app.js?v=16"></script>
 </body>
 </html>
