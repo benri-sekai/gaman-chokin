@@ -677,3 +677,15 @@ button.milestone {
 .zukan-entry[data-found="false"] .zukan-text {
   color: var(--muted);
 }
+
+.next-egg {
+  margin-top: 10px;
+}
+
+.zukan-raised {
+  display: inline-block;
+  margin: 0 0 4px;
+  color: var(--accent);
+  font-size: 0.8rem;
+  font-weight: 700;
+}

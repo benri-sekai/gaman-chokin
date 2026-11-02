@@ -9,7 +9,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icon-180.png">
   <!-- 更新のたびに v の番号を上げ、古いキャッシュとの混在を防ぐ(sw.js の VERSION も同じ番号にする) -->
-  <link rel="stylesheet" href="style.css?v=14">
+  <link rel="stylesheet" href="style.css?v=15">
   <title>我慢貯金</title>
 </head>
 <body>
@@ -21,6 +21,7 @@
       <p class="growth-title"><span id="stage">たまご</span> <b>Lv.<span id="level">1</span></b></p>
       <div class="bar"><div class="bar-fill" id="level-bar"></div></div>
       <p class="count">次のレベルまで あと<span id="next-level">500</span>円</p>
+      <button class="secondary next-egg" id="next-egg" type="button" hidden>次のたまごを迎える</button>
       <button class="quiet" id="open-zukan" type="button">キャラ図鑑 <span id="zukan-count">1/10</span></button>
     </section>
 
@@ -34,7 +35,7 @@
     <button class="primary" id="open-sheet" type="button">我慢した!</button>
     <button class="quiet" id="open-spent" type="button">使っちゃった…</button>
     <button class="quiet" id="backup-hint" type="button" hidden>そろそろ記録を保管しませんか?</button>
-    <p class="note">実際の貯金ではなく、記録上の金額です(ver.14)</p>
+    <p class="note">実際の貯金ではなく、記録上の金額です(ver.15)</p>
   </main>
 
   <main class="history" id="view-history" hidden>
@@ -218,6 +219,6 @@
     </form>
   </dialog>
 
-  <script src="app.js?v=14"></script>
+  <script src="app.js?v=15"></script>
 </body>
 </html>

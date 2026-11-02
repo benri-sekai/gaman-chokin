@@ -28,9 +28,13 @@ const WELCOME_BACK = "ひさしぶり!また来てくれてうれしいよ";
 const STAGES = [
   { id: "egg", name: "はじまり", minExp: 0 },
   { id: "baby", name: "誕生", minExp: 5000, image: 1 },
-  { id: "child", name: "進化1", minExp: 30000, image: 2 },
-  { id: "adult", name: "最終進化", minExp: 100000, image: 3 },
+  { id: "child", name: "進化1", minExp: 20000, image: 2 },
+  { id: "adult", name: "最終進化", minExp: 50000, image: 3 },
 ];
+// 次のたまごを迎えた日時の一覧。その後の我慢だけで新しいキャラが育つ
+const EGG_STARTS_KEY = "eggStarts";
+// キャラごとに育てきった回数。図鑑と同じくリセットしても残す
+const RAISED_KEY = "raised";
 const EGG = {
   id: "egg",
   name: "コツコツのたまご",
@@ -336,6 +340,45 @@ function reachedCharacterIds(stats) {
   return ids;
 }
 
+function readStorage(key, fallback) {
+  try {
+    return JSON.parse(localStorage.getItem(key)) ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeStorage(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // 保存できない環境では、今の画面の表示だけになる
+  }
+}
+
+function loadEggStarts() {
+  const value = readStorage(EGG_STARTS_KEY, []);
+  return Array.isArray(value) ? value.filter(isValidDate).sort() : [];
+}
+
+function loadRaised() {
+  const value = readStorage(RAISED_KEY, {});
+  const raised = {};
+  for (const id of CHARACTER_IDS) {
+    if (Number.isSafeInteger(value?.[id]) && value[id] > 0) raised[id] = value[id];
+  }
+  return raised;
+}
+
+// 同じファイルを何度復元しても増えすぎないよう、多いほうの回数を残す
+function mergeRaised(other) {
+  const raised = loadRaised();
+  for (const [id, count] of Object.entries(other)) {
+    raised[id] = Math.max(raised[id] ?? 0, count);
+  }
+  writeStorage(RAISED_KEY, raised);
+}
+
 // 図鑑はリセットしても残したいので、記録とは別に保存する
 function loadDiscovered() {
   try {
@@ -367,7 +410,11 @@ function getStats(records, goals) {
   const gaman = records.filter((record) => !isSpent(record));
   // 経験値は「使っちゃった」では減らさない
   const exp = sumOf(gaman);
-  const level = 1 + Math.floor(Math.sqrt(exp / LEVEL_UNIT));
+  // 今のキャラは、最後にたまごを迎えた後の我慢だけで育つ
+  const eggStart = loadEggStarts().at(-1) ?? "";
+  const ownGaman = gaman.filter((record) => record.createdAt > eggStart);
+  const characterExp = sumOf(ownGaman);
+  const level = 1 + Math.floor(Math.sqrt(characterExp / LEVEL_UNIT));
   const lastTime = Math.max(0, ...records.map((record) => new Date(record.createdAt).getTime()));
   // 使いすぎた分を後の我慢に持ち越さないよう、古い順に計算して0円で止める
   const oldestFirst = [...records].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
@@ -382,9 +429,10 @@ function getStats(records, goals) {
     milestones: getMilestones(timeline, goals),
     gamanCount: gaman.length,
     exp,
+    characterExp,
     level,
-    stage: STAGES.filter((stage) => exp >= stage.minExp).pop(),
-    type: pickType(gaman),
+    stage: STAGES.filter((stage) => characterExp >= stage.minExp).pop(),
+    type: pickType(ownGaman),
     isLonely: records.length > 0 && Date.now() - lastTime >= SAD_AFTER_MS,
   };
 }
@@ -744,6 +792,8 @@ async function exportBackup() {
       goals: latestGoals,
       wishes: latestWishes,
       discovered: [...loadDiscovered()],
+      eggStarts: loadEggStarts(),
+      raised: loadRaised(),
     },
     null,
     2,
@@ -836,11 +886,19 @@ function parseBackup(text) {
   });
   // 図鑑は読めなくても記録の復元は止めない
   const discovered = Array.isArray(data.discovered) ? data.discovered.filter((id) => CHARACTER_IDS.includes(id)) : [];
+  const eggStarts = Array.isArray(data.eggStarts) ? data.eggStarts.filter(isValidDate).sort() : [];
+  const raised = {};
+  for (const id of CHARACTER_IDS) {
+    const count = data.raised?.[id];
+    if (Number.isSafeInteger(count) && count > 0) raised[id] = count;
+  }
   return {
     records,
     goals,
     wishes,
     discovered,
+    eggStarts,
+    raised,
     exportedAt: isValidDate(data.exportedAt) ? data.exportedAt : null,
   };
 }
@@ -897,6 +955,13 @@ function zukanEntry(id, label, character, discovered) {
     badge.textContent = "いまの相棒";
     labelEl.after(badge);
   }
+  const raisedCount = loadRaised()[id];
+  if (raisedCount) {
+    const raised = document.createElement("span");
+    raised.className = "zukan-raised";
+    raised.textContent = raisedCount > 1 ? `育てきった ×${raisedCount}` : "育てきった";
+    name.after(raised);
+  }
   const item = document.createElement("li");
   item.className = "zukan-entry";
   item.dataset.found = isFound;
@@ -949,8 +1014,10 @@ async function render(db) {
   document.getElementById("level").textContent = stats.level;
   const start = levelStartExp(stats.level);
   const next = levelStartExp(stats.level + 1);
-  document.getElementById("level-bar").style.width = `${((stats.exp - start) / (next - start)) * 100}%`;
-  document.getElementById("next-level").textContent = (next - stats.exp).toLocaleString("ja-JP");
+  document.getElementById("level-bar").style.width = `${((stats.characterExp - start) / (next - start)) * 100}%`;
+  document.getElementById("next-level").textContent = (next - stats.characterExp).toLocaleString("ja-JP");
+  document.getElementById("next-egg").hidden = stats.stage.id !== "adult";
+  resetNextEggButton();
   characterEl.src = characterImage(stats);
   renderZukan(addDiscovered(reachedCharacterIds(stats)));
   clearTimeout(moodTimer);
@@ -986,6 +1053,24 @@ function celebrate(amount, before) {
   moodTimer = setTimeout(() => {
     characterEl.dataset.mood = "normal";
   }, 1500);
+}
+
+function resetNextEggButton() {
+  const button = document.getElementById("next-egg");
+  button.textContent = "次のたまごを迎える";
+  delete button.dataset.armed;
+}
+
+// 記録は残したまま、今から我慢した分で新しいたまごを育てる
+async function startNextEgg(db) {
+  const finished = characterName(stats);
+  const finishedId = reachedCharacterIds(stats).at(-1);
+  const raised = loadRaised();
+  raised[finishedId] = (raised[finishedId] ?? 0) + 1;
+  writeStorage(RAISED_KEY, raised);
+  writeStorage(EGG_STARTS_KEY, [...loadEggStarts(), new Date().toISOString()]);
+  await render(db);
+  messageEl.textContent = `${finished}は図鑑で見守っているよ。新しいたまごが届いた!`;
 }
 
 function resetDeleteButton() {
@@ -1108,6 +1193,16 @@ async function start() {
   document.getElementById("open-zukan").addEventListener("click", () => zukanSheet.showModal());
   characterEl.addEventListener("click", () => zukanSheet.showModal());
   document.getElementById("close-zukan").addEventListener("click", () => zukanSheet.close());
+  // 押し間違えで相棒と別れないよう、2回押して確定する
+  document.getElementById("next-egg").addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    if (!button.dataset.armed) {
+      button.dataset.armed = "true";
+      button.textContent = `${characterName(stats)}を図鑑に送り、たまごを迎える(もう一度押す)`;
+      return;
+    }
+    await startNextEgg(db);
+  });
   document.getElementById("tab-home").addEventListener("click", () => showView("home"));
   document.getElementById("tab-history").addEventListener("click", () => showView("history"));
   document.getElementById("tab-milestones").addEventListener("click", () => showView("milestones"));
@@ -1195,6 +1290,9 @@ async function start() {
     }
     // 図鑑は置き換えず、今まで出会ったキャラに足す
     addDiscovered(pendingImport.discovered);
+    mergeRaised(pendingImport.raised);
+    // 今のキャラがどこから育っているかは記録と対になるので、記録と一緒に置き換える
+    writeStorage(EGG_STARTS_KEY, pendingImport.eggStarts);
     clearPendingImport();
     await render(db);
     setBackupStatus(
@@ -1218,6 +1316,7 @@ async function start() {
   });
   document.getElementById("reset-apply").addEventListener("click", async () => {
     await writeStore(db, (store) => store.clear());
+    writeStorage(EGG_STARTS_KEY, []);
     resetConfirm.hidden = true;
     await render(db);
     messageEl.textContent = "また一緒にがんばろう!";
