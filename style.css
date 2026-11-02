@@ -597,3 +597,83 @@ button.milestone {
   font-weight: 600;
   cursor: pointer;
 }
+
+.character {
+  cursor: pointer;
+}
+
+.zukan-sheet {
+  max-height: 90dvh;
+  overflow-y: auto;
+}
+
+.zukan-type {
+  margin: 20px 0 2px;
+  font-size: 1rem;
+}
+
+.zukan-theme {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.zukan-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.zukan-entry {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  text-align: left;
+}
+
+.zukan-image {
+  flex: none;
+  width: 72px;
+  height: 72px;
+  object-fit: contain;
+}
+
+/* まだ出会っていないキャラは影だけ見せる */
+.zukan-entry[data-found="false"] .zukan-image {
+  filter: brightness(0) opacity(0.18);
+}
+
+.zukan-label {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.zukan-badge {
+  margin-left: 6px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.zukan-name {
+  display: block;
+  margin: 2px 0 4px;
+}
+
+.zukan-text {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.6;
+}
+
+.zukan-entry[data-found="false"] .zukan-text {
+  color: var(--muted);
+}

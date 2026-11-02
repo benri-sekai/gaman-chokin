@@ -26,17 +26,80 @@ const WELCOME_BACK = "ひさしぶり!また来てくれてうれしいよ";
 
 // 進化に必要な累計額。実際に使いながら調整する
 const STAGES = [
-  { id: "egg", name: "たまご", minExp: 0 },
-  { id: "baby", name: "赤ちゃん", minExp: 5000, image: 1 },
-  { id: "child", name: "子ども", minExp: 30000, image: 2 },
-  { id: "adult", name: "大人", minExp: 100000, image: 3 },
+  { id: "egg", name: "はじまり", minExp: 0 },
+  { id: "baby", name: "誕生", minExp: 5000, image: 1 },
+  { id: "child", name: "進化1", minExp: 30000, image: 2 },
+  { id: "adult", name: "最終進化", minExp: 100000, image: 3 },
 ];
-// たまごから生まれるタイプ。最初の我慢の記録をもとにランダムで決まる
+const EGG = {
+  id: "egg",
+  name: "コツコツのたまご",
+  text: "「今日は買わずにおこう」と決めたとき、小さな力が殻に宿る。中で眠るのは、あなたの選択を栄養に育つ生きもの。どんな未来が生まれるか、まだ誰も知らない。",
+};
+// たまごから生まれるタイプ。最初の我慢の記録をもとにランダムで決まる。
+// 並び順を変えると今のキャラのタイプが変わるので、図鑑の順は ZUKAN_ORDER で決める
 const TYPES = [
-  { id: "fire", name: "ほのお" },
-  { id: "leaf", name: "くさ" },
-  { id: "water", name: "みず" },
+  {
+    id: "fire",
+    name: "炎属性",
+    theme: "衝動が、未来へ進む力になる",
+    characters: [
+      {
+        name: "ヒポロ",
+        text: "「ほしい!」という気持ちから生まれた、小さな火の子。すぐ飛びつきそうになるけれど、一呼吸おけた日は得意顔。消さずにとっておいた熱が、成長の力になる。",
+      },
+      {
+        name: "カケビ",
+        text: "目の前の誘惑を追いかけるより、自分で決めたゴールへ走るのが好きになった。見送った買いものの分だけ、しっぽの炎が長く伸びる。ときどき振り返るが、足は止めない。",
+      },
+      {
+        name: "エンガオウ",
+        text: "燃え上がる気持ちを、自分の意志で使えるようになった姿。大きなたてがみは、未来のために選んできた日々の証。「ここぞ」というときには、貯めた力を惜しまず使う。",
+      },
+    ],
+  },
+  {
+    id: "leaf",
+    name: "森属性",
+    theme: "小さな積み重ねが、実りになる",
+    characters: [
+      {
+        name: "タネモチ",
+        text: "未来の楽しみを、おなかの種にしまっている。ひとつ我慢できるたび、頭の芽がほんの少し伸びるらしい。昨日との違いは、本人にもまだ分からない。",
+      },
+      {
+        name: "コノリス",
+        text: "今ほしいものと、これから叶えたいことを見比べるようになった。選び取った未来を、枝のしっぽに結んで歩く。小さな積み重ねほど、決して落とさない。",
+      },
+      {
+        name: "オオミノリ",
+        text: "こつこつ貯めた力が、背中の大樹に金色の実をつけた。その木陰は、頑張ってきた持ち主がひと休みする場所。実をひとつ味わっても、育てた根っこはなくならない。",
+      },
+    ],
+  },
+  {
+    id: "water",
+    name: "水属性",
+    theme: "ひと呼吸が、自分のペースをつくる",
+    characters: [
+      {
+        name: "ポタネ",
+        text: "ほしいものを見つけると、ぷるぷる揺れて迷いはじめる。少し待ってから決められた日は、体に小さなしずくが増える。急がなくても育つことを、まだ知らない。",
+      },
+      {
+        name: "ユルカワ",
+        text: "誘惑の波を、すいっと受け流すのが得意。人のペースには流されず、自分に必要なものをのんびり選ぶ。何も買わなかった日も、ちゃんと前へ進んでいる。",
+      },
+      {
+        name: "ナミヌシ",
+        text: "一滴ずつ貯めた力で、大きな流れをつくる水龍。迷った日も立ち止まった日も、長い川の一部として覚えている。持ち主がまた始めようと思ったら、静かに隣を泳ぎだす。",
+      },
+    ],
+  },
 ];
+const ZUKAN_ORDER = ["leaf", "fire", "water"];
+const ZUKAN_KEY = "zukan";
+const CHARACTER_IDS = ["egg", ...TYPES.flatMap((type) => [1, 2, 3].map((image) => `${type.id}-${image}`))];
 const LEVEL_UNIT = 500;
 const SAD_AFTER_MS = 3 * 24 * 60 * 60 * 1000;
 
@@ -257,7 +320,46 @@ function pickType(gaman) {
 }
 
 function characterName(stats) {
-  return stats.stage.id === "egg" ? stats.stage.name : `${stats.type.name}の${stats.stage.name}`;
+  return stats.stage.image ? stats.type.characters[stats.stage.image - 1].name : EGG.name;
+}
+
+function characterImage(stats) {
+  return stats.stage.image ? `chara/${stats.type.id}-${stats.stage.image}.png` : "chara/egg.png";
+}
+
+// 今のキャラと、その前の姿は出会ったことにする
+function reachedCharacterIds(stats) {
+  const ids = ["egg"];
+  for (let image = 1; image <= (stats.stage.image ?? 0); image += 1) {
+    ids.push(`${stats.type.id}-${image}`);
+  }
+  return ids;
+}
+
+// 図鑑はリセットしても残したいので、記録とは別に保存する
+function loadDiscovered() {
+  try {
+    const value = JSON.parse(localStorage.getItem(ZUKAN_KEY));
+    return new Set(Array.isArray(value) ? value.filter((id) => CHARACTER_IDS.includes(id)) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function addDiscovered(ids) {
+  const discovered = loadDiscovered();
+  const before = discovered.size;
+  for (const id of ids) {
+    if (CHARACTER_IDS.includes(id)) discovered.add(id);
+  }
+  if (discovered.size !== before) {
+    try {
+      localStorage.setItem(ZUKAN_KEY, JSON.stringify([...discovered]));
+    } catch {
+      // 保存できなくても、今の姿は毎回図鑑に載る
+    }
+  }
+  return discovered;
 }
 
 function getStats(records, goals) {
@@ -641,6 +743,7 @@ async function exportBackup() {
       records: latestRecords,
       goals: latestGoals,
       wishes: latestWishes,
+      discovered: [...loadDiscovered()],
     },
     null,
     2,
@@ -731,7 +834,15 @@ function parseBackup(text) {
       ...(wish.purchasedAt && { purchasedAt: wish.purchasedAt }),
     };
   });
-  return { records, goals, wishes, exportedAt: isValidDate(data.exportedAt) ? data.exportedAt : null };
+  // 図鑑は読めなくても記録の復元は止めない
+  const discovered = Array.isArray(data.discovered) ? data.discovered.filter((id) => CHARACTER_IDS.includes(id)) : [];
+  return {
+    records,
+    goals,
+    wishes,
+    discovered,
+    exportedAt: isValidDate(data.exportedAt) ? data.exportedAt : null,
+  };
 }
 
 function clearPendingImport() {
@@ -760,6 +871,66 @@ async function chooseImportFile(input) {
   setBackupStatus("");
 }
 
+function zukanEntry(id, label, character, discovered) {
+  const isFound = discovered.has(id);
+  const image = document.createElement("img");
+  image.className = "zukan-image";
+  image.src = `chara/${id}.png`;
+  image.alt = "";
+  image.width = 72;
+  image.height = 72;
+  image.loading = "lazy";
+  const labelEl = document.createElement("span");
+  labelEl.className = "zukan-label";
+  labelEl.textContent = label;
+  const name = document.createElement("strong");
+  name.className = "zukan-name";
+  name.textContent = isFound ? character.name : "???";
+  const text = document.createElement("p");
+  text.className = "zukan-text";
+  text.textContent = isFound ? character.text : "まだ出会っていません";
+  const body = document.createElement("div");
+  body.append(labelEl, name, text);
+  if (id === reachedCharacterIds(stats).at(-1)) {
+    const badge = document.createElement("span");
+    badge.className = "zukan-badge";
+    badge.textContent = "いまの相棒";
+    labelEl.after(badge);
+  }
+  const item = document.createElement("li");
+  item.className = "zukan-entry";
+  item.dataset.found = isFound;
+  item.append(image, body);
+  return item;
+}
+
+function renderZukan(discovered) {
+  document.getElementById("zukan-count").textContent = `${discovered.size}/${CHARACTER_IDS.length}`;
+  const eggList = document.createElement("ul");
+  eggList.className = "zukan-list";
+  eggList.append(zukanEntry("egg", "はじまりの卵", EGG, discovered));
+  const groups = ZUKAN_ORDER.map((typeId) => {
+    const type = TYPES.find((candidate) => candidate.id === typeId);
+    const title = document.createElement("h3");
+    title.className = "zukan-type";
+    title.textContent = type.name;
+    const theme = document.createElement("p");
+    theme.className = "zukan-theme";
+    theme.textContent = type.theme;
+    const list = document.createElement("ul");
+    list.className = "zukan-list";
+    list.append(
+      ...type.characters.map((character, index) =>
+        zukanEntry(`${type.id}-${index + 1}`, STAGES[index + 1].name, character, discovered),
+      ),
+    );
+    const section = document.createElement("section");
+    section.append(title, theme, list);
+    return section;
+  });
+  document.getElementById("zukan").replaceChildren(eggList, ...groups);
+}
+
 async function render(db) {
   const [records, goals, wishes] = await Promise.all([
     getAll(db, STORE),
@@ -780,7 +951,8 @@ async function render(db) {
   const next = levelStartExp(stats.level + 1);
   document.getElementById("level-bar").style.width = `${((stats.exp - start) / (next - start)) * 100}%`;
   document.getElementById("next-level").textContent = (next - stats.exp).toLocaleString("ja-JP");
-  characterEl.src = stats.stage.image ? `chara/${stats.type.id}-${stats.stage.image}.png` : "chara/egg.png";
+  characterEl.src = characterImage(stats);
+  renderZukan(addDiscovered(reachedCharacterIds(stats)));
   clearTimeout(moodTimer);
   characterEl.dataset.mood = stats.isLonely ? "sad" : "normal";
   renderHistory(records);
@@ -802,7 +974,7 @@ function celebrate(amount, before) {
   if (stats.stage.id !== before.stage.id) {
     message =
       before.stage.id === "egg"
-        ? `たまごが割れて、${stats.type.name}の子が生まれたよ!`
+        ? `たまごが割れて、${characterName(stats)}が生まれたよ!`
         : `+${yen(amount)}! ${characterName(stats)}に進化したよ!`;
   } else if (newlyAchieved.length > 0) {
     message = `+${yen(amount)}! 「${newlyAchieved[0].name}」を達成!`;
@@ -932,6 +1104,10 @@ async function start() {
   document.getElementById("back-to-items").addEventListener("click", showItemStep);
   document.getElementById("close-sheet").addEventListener("click", () => sheet.close());
   document.getElementById("close-form").addEventListener("click", () => formSheet.close());
+  const zukanSheet = document.getElementById("zukan-sheet");
+  document.getElementById("open-zukan").addEventListener("click", () => zukanSheet.showModal());
+  characterEl.addEventListener("click", () => zukanSheet.showModal());
+  document.getElementById("close-zukan").addEventListener("click", () => zukanSheet.close());
   document.getElementById("tab-home").addEventListener("click", () => showView("home"));
   document.getElementById("tab-history").addEventListener("click", () => showView("history"));
   document.getElementById("tab-milestones").addEventListener("click", () => showView("milestones"));
@@ -1017,6 +1193,8 @@ async function start() {
       setBackupStatus("読み込めませんでした。今のデータは変更していません。");
       return;
     }
+    // 図鑑は置き換えず、今まで出会ったキャラに足す
+    addDiscovered(pendingImport.discovered);
     clearPendingImport();
     await render(db);
     setBackupStatus(

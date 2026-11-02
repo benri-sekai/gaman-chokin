@@ -1,6 +1,6 @@
 // 更新するときは VERSION と index.html の v= と ver. を同じ番号に上げる。
 // 番号が変わると新しいファイル一式を取得してから入れ替わる。
-const VERSION = 13;
+const VERSION = 14;
 const CACHE_PREFIX = "gaman-chokin-";
 const CACHE = `${CACHE_PREFIX}${VERSION}`;
 const ASSETS = [

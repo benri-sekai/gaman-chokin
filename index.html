@@ -9,7 +9,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icon-180.png">
   <!-- 更新のたびに v の番号を上げ、古いキャッシュとの混在を防ぐ(sw.js の VERSION も同じ番号にする) -->
-  <link rel="stylesheet" href="style.css?v=13">
+  <link rel="stylesheet" href="style.css?v=14">
   <title>我慢貯金</title>
 </head>
 <body>
@@ -21,6 +21,7 @@
       <p class="growth-title"><span id="stage">たまご</span> <b>Lv.<span id="level">1</span></b></p>
       <div class="bar"><div class="bar-fill" id="level-bar"></div></div>
       <p class="count">次のレベルまで あと<span id="next-level">500</span>円</p>
+      <button class="quiet" id="open-zukan" type="button">キャラ図鑑 <span id="zukan-count">1/10</span></button>
     </section>
 
     <section class="savings" aria-label="現在の貯金額">
@@ -33,7 +34,7 @@
     <button class="primary" id="open-sheet" type="button">我慢した!</button>
     <button class="quiet" id="open-spent" type="button">使っちゃった…</button>
     <button class="quiet" id="backup-hint" type="button" hidden>そろそろ記録を保管しませんか?</button>
-    <p class="note">実際の貯金ではなく、記録上の金額です(ver.13)</p>
+    <p class="note">実際の貯金ではなく、記録上の金額です(ver.14)</p>
   </main>
 
   <main class="history" id="view-history" hidden>
@@ -107,7 +108,7 @@
     <p class="backup-status" id="backup-status" role="status"></p>
 
     <h2 class="section-title">記録のリセット</h2>
-    <p class="note">すべての記録を削除して、キャラと貯金額を最初の状態に戻します。自分の目標とほしいものリストは残ります。</p>
+    <p class="note">すべての記録を削除して、キャラと貯金額を最初の状態に戻します。自分の目標、ほしいものリスト、キャラ図鑑は残ります。</p>
     <button class="danger-outline" id="reset-open" type="button">記録をリセット</button>
     <div class="import-confirm" id="reset-confirm" hidden>
       <p id="reset-summary"></p>
@@ -124,6 +125,15 @@
     <button class="tab" id="tab-wishes" type="button">ほしい物</button>
     <button class="tab" id="tab-settings" type="button">設定</button>
   </nav>
+
+  <dialog class="sheet zukan-sheet" id="zukan-sheet" aria-labelledby="zukan-title">
+    <div class="sheet-header">
+      <h2 id="zukan-title">キャラ図鑑</h2>
+      <button class="close" id="close-zukan" type="button" aria-label="閉じる">×</button>
+    </div>
+    <p class="sheet-lead">育てたキャラは、記録をリセットしても図鑑に残ります。</p>
+    <div id="zukan"></div>
+  </dialog>
 
   <dialog class="sheet" id="sheet" aria-labelledby="sheet-title">
     <div class="sheet-header">
@@ -208,6 +218,6 @@
     </form>
   </dialog>
 
-  <script src="app.js?v=13"></script>
+  <script src="app.js?v=14"></script>
 </body>
 </html>
